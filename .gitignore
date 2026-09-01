@@ -1,0 +1,15 @@
+node_modules/
+.DS_Store
+*.log
+
+# Python / uv
+__pycache__/
+*.pyc
+.venv/
+.env
+uv.lock
+
+# 服务器运维脚本（含密码）
+scripts/deploy.py
+scripts/remote_check.py
+scripts/disk_check.py

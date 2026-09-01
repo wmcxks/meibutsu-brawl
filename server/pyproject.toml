@@ -1,0 +1,17 @@
+[project]
+name = "server"
+version = "0.1.0"
+description = "名物大乱斗 - 后端服务"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "asyncmy>=0.2.10",
+    "fastapi>=0.136.1",
+    "httpx>=0.28.1",
+    "pydantic-settings>=2.14.0",
+    "pyjwt>=2.12.1",
+    "python-dotenv>=1.2.2",
+    "redis>=5.0.0",
+    "sqlalchemy[asyncio]>=2.0.49",
+    "uvicorn[standard]>=0.46.0",
+]

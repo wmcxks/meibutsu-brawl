@@ -1,0 +1,9 @@
+[project]
+name = "oss-upload-script"
+version = "0.1.0"
+description = "批量上传 client/images 至阿里云 OSS"
+requires-python = ">=3.13"
+dependencies = [
+    "oss2>=2.19.1",
+    "python-dotenv>=1.0.1",
+]

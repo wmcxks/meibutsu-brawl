@@ -1,0 +1,25 @@
+@import "tailwindcss";
+
+/* 画布透明、遮罩移除的瞬间兜底：避免透出白底闪烁 */
+html,
+body {
+  background: #111111;
+}
+
+/* ============================================================
+   DOM 垫底背景层：作业纸风格网格（纯 CSS，不占 WebGL 资源，无旋转）
+   米白纸底 + 暖灰 (#bcb5ae) 细网格线，低饱和、干净素雅。
+   ============================================================ */
+#bg-container {
+  position: fixed;
+  inset: 0;
+  z-index: 0; /* 垫底：Phaser 画布(#app z-1)与 UI 层(z-50)均在其上 */
+  overflow: hidden;
+  pointer-events: none; /* 不拦截任何交互 */
+  /* 作业纸网格：米白底色 + 横竖 1px 暖灰线，30px 单元格 */
+  background-color: #f9f7f2;
+  background-image:
+    linear-gradient(to right, rgba(188, 181, 174, 0.4) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(188, 181, 174, 0.4) 1px, transparent 1px);
+  background-size: 30px 30px;
+}

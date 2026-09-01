@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Meibutsu Brawl（名物大乱斗）</title>
+    <!-- 首屏加载动画样式（独立文件，替换此文件即可更换加载效果） -->
+    <link rel="stylesheet" href="/loader.css" />
+  </head>
+  <body>
+    <!--
+      原生首屏幕布：遮挡 HTML 未样式化闪烁与资源加载过程。
+      覆盖全屏、深黑底、极高 z-index；Phaser 就绪后由 main.ts 移除。
+      内部是 /loader.css 驱动的 3D 盒子加载动画。
+    -->
+    <div
+      id="global-loading-mask"
+      style="position: fixed; inset: 0; z-index: 99999; background: #111111; display: flex; align-items: center; justify-content: center;"
+    >
+      <div class="loader">
+        <div class="ground"><div></div></div>
+        <div class="box box0"><div></div></div>
+        <div class="box box1"><div></div></div>
+        <div class="box box2"><div></div></div>
+        <div class="box box3"><div></div></div>
+        <div class="box box4"><div></div></div>
+        <div class="box box5"><div></div></div>
+        <div class="box box6"><div></div></div>
+        <div class="box box7"><div></div></div>
+      </div>
+    </div>
+
+    <!--
+      DOM 垫底背景层：旋转几何渐变（纯 CSS，GPU 合成器驱动，零 WebGL 开销）。
+      样式见 src/style.css 中 #bg-container / ::before。
+    -->
+    <div id="bg-container"></div>
+
+    <!-- Phaser canvas mount point: full-viewport so Scale.FIT fills the screen -->
+    <div id="app" class="fixed inset-0 overflow-hidden"></div>
+
+    <!-- HTML UI overlay (Alpine.js + TailwindCSS) above the canvas -->
+    <div id="ui-layer" x-data="gameUI" class="pointer-events-none fixed inset-0 z-50">
+      <!--
+        ui-container：720x1280 设计稿死尺寸容器。
+        实际缩放由 src/core/uiScaler.ts 计算（与 Phaser Scale.FIT 相同的
+        min(容器宽/720, 容器高/1280)），transform: scale() 后绝对居中，
+        保证与底部 canvas 严丝合缝。内部元素统一使用设计稿像素/百分比。
+      -->
+      <div id="ui-container" class="pointer-events-none absolute left-1/2 top-1/2 h-[1280px] w-[720px]">
+      <!-- 游戏内 HUD：右上角静音按钮 + 底部道具栏（转场期间隐藏，避免悬浮在遮罩上） -->
+      <div x-show="!isTransitioning" class="pointer-events-none absolute inset-0 [container-type:size]">
+        <!-- 🔊/🔇 一键静音按钮（右上角，即时生效并持久化） -->
+        <button
+          @click="toggleSound(isSoundOn)"
+          class="pointer-events-auto absolute right-4 top-4 flex h-[9cqw] cursor-pointer items-center justify-center rounded-full border-none bg-black/40 px-[2cqw] text-[3.6cqw] font-bold text-white"
+          style="line-height:1;"
+          x-text="isSoundOn ? '🔊' : '🔇'"
+          :aria-label="isSoundOn ? '静音' : '取消静音'"
+        ></button>
+        <!-- 底部道具栏（原 props.js 复刻：移出/撤回/洗牌/透视，0 次罩灰 + 右上角角标） -->
+        <div class="pointer-events-auto absolute left-1/2 top-[90%] flex -translate-x-1/2 gap-[5cqw]">
+          <template x-for="(icon, i) in propIcons" :key="icon">
+            <button
+              @click="useProp(i)"
+              :class="propCounts[i] <= 0 ? 'opacity-40 grayscale' : ''"
+              class="relative h-[16cqw] w-[16cqw] cursor-pointer overflow-hidden rounded-[10px] border-none p-0"
+            >
+              <img :src="'/images/game/props/' + icon + '.png'" class="h-full w-full object-cover" alt="">
+              <span
+                x-show="propCounts[i] > 0"
+                class="absolute -top-[1.2cqw] -right-[1.2cqw] flex h-[5.7cqw] min-w-[5.7cqw] items-center justify-center rounded-full bg-[#ff5252] px-[1cqw] text-[3.6cqw] font-bold text-white"
+                x-text="propCounts[i]"
+              ></span>
+            </button>
+          </template>
+        </div>
+      </div>
+
+      <!-- 网络异常弹窗（开局会话快速失败时弹出，可手动重连） -->
+      <div
+        x-show="isNetworkError"
+        class="pointer-events-auto absolute inset-0 z-20 flex items-center justify-center bg-black/40"
+      >
+        <div class="w-[70%] max-w-[400px] rounded-[14px] bg-white p-6 text-center font-sans">
+          <p class="m-0 mb-5 text-[15px] text-[#555]">网络异常，关卡加载失败，请检查网络后重试。</p>
+          <button @click="retryConnection" class="w-full cursor-pointer rounded-[10px] bg-[#e8b33d] py-3 text-base font-bold text-white">重新连接</button>
+        </div>
+      </div>
+
+      <!-- Toast 提示（转场期间隐藏） -->
+      <div
+        x-show="toastVisible && !isTransitioning"
+        x-transition.opacity
+        class="pointer-events-none absolute left-1/2 top-[55%] z-10 -translate-x-1/2 rounded-lg bg-black/70 px-4 py-2 text-sm text-white"
+        x-text="toastText"
+      ></div>
+
+      <!-- 复活弹窗（原 revive.js 1:1 复刻：遮罩 0.6 黑底 + 75%x35% 白底圆角 + 双按钮） -->
+      <div
+        x-show="isReviveVisible"
+        class="absolute inset-0 flex items-center justify-center bg-black/60 font-sans [container-type:size] pointer-events-auto"
+      >
+        <div class="relative w-[75cqw] h-[35cqh] bg-white rounded-[2.22cqw]">
+          <p class="absolute top-[22%] left-0 m-0 w-full -translate-y-1/2 text-center text-[6.5cqw] font-bold text-[#e17055]">槽位已满！</p>
+          <p class="absolute top-[44%] left-0 m-0 w-full -translate-y-1/2 text-center text-[3.8cqw] text-[#666]">是否复活</p>
+          <button
+            @click="cancelRevive"
+            class="absolute top-[70%] left-[8%] h-[18%] w-[38%] cursor-pointer rounded-[1.11cqw] border-none bg-[#e0e0e0] text-[3.5cqw] font-bold text-[#333]"
+          >放弃复活</button>
+          <button
+            @click="handleRevive"
+            class="absolute top-[70%] left-[54%] h-[18%] w-[38%] cursor-pointer rounded-[1.11cqw] border-none bg-[#00b894] text-[3.5cqw] font-bold text-white"
+          >复活</button>
+        </div>
+      </div>
+
+      <!-- 游戏结束（失败）弹窗 -->
+      <div
+        x-show="isGameOver"
+        class="pointer-events-auto absolute inset-0 flex items-center justify-center bg-black/55"
+      >
+        <div class="w-[72%] max-w-[420px] rounded-[14px] bg-white p-7 text-center font-sans">
+          <h2 class="m-0 mb-2 text-[22px] font-bold text-[#7a5c1e]">游戏失败</h2>
+          <p class="m-0 mb-5 text-[15px] text-[#555]">卡槽已满，本局挑战失败了，是否重新开始？</p>
+          <button @click="restartGame" class="w-full cursor-pointer rounded-[10px] bg-[#e8b33d] py-3 text-base font-bold text-white">重新开始</button>
+          <button @click="showLeaderboard" class="mt-2.5 w-full cursor-pointer rounded-[10px] border border-[#e8b33d] bg-white py-3 text-base font-bold text-[#b8860b]">查看排行榜</button>
+        </div>
+      </div>
+
+      <!-- 排行榜面板 -->
+      <div
+        x-show="leaderboardVisible"
+        class="pointer-events-auto absolute inset-0 flex items-center justify-center bg-black/60"
+      >
+        <div class="flex max-h-[70%] w-[80%] max-w-[440px] flex-col rounded-[14px] bg-white p-5 text-center font-sans">
+          <h2 class="m-0 mb-3 text-[20px] font-bold text-[#7a5c1e]">排行榜（最快通关）</h2>
+          <ul class="m-0 mb-4 list-none flex-1 overflow-y-auto p-0">
+            <template x-for="(item, idx) in leaderboard" :key="idx">
+              <li class="flex justify-between border-b border-[#eee] px-1 py-2 text-sm text-[#444]">
+                <span><span x-text="item.rank"></span>. <span x-text="item.nickname"></span></span>
+                <span class="font-bold text-[#d89b2e]" x-text="formatTime(item.best_time)"></span>
+              </li>
+            </template>
+          </ul>
+          <div x-show="leaderboard.length === 0" class="py-2 text-sm text-[#999]">暂无通关记录</div>
+          <button @click="closeLeaderboard" class="w-full cursor-pointer rounded-[10px] bg-[#e8b33d] py-3 text-base font-bold text-white">关闭</button>
+        </div>
+      </div>
+      </div>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
