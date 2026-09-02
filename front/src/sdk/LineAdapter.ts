@@ -10,7 +10,7 @@
  * 按 line:sub 查找/创建用户并签发统一 JWT（需配置 LINE_CHANNEL_ID）。
  */
 
-import { postApi, setAuthToken } from '../api/request'
+import { postApi, setAuthToken, getDeviceId } from '../api/request'
 import type { Liff } from '@line/liff'
 import type { ISDKAdapter } from './ISDKAdapter'
 
@@ -44,8 +44,11 @@ export class LineAdapter implements ISDKAdapter {
       throw new Error('[line] LIFF 登录未返回 id_token')
     }
 
-    // id_token -> 后端换取系统统一 JWT
-    const data = await postApi<{ token: string }>('/api/auth/line', { id_token: idToken })
+    // id_token -> 后端换取系统统一 JWT；携带本机 guest_uuid 触发游客数据并入（A8）
+    const data = await postApi<{ token: string }>('/api/auth/line', {
+      id_token: idToken,
+      guest_uuid: getDeviceId(),
+    })
     setAuthToken(data.token)
     return data.token
   }

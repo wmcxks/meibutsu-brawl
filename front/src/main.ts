@@ -8,9 +8,18 @@ import { EventBus } from './core/EventBus'
 import { initUiScaler } from './core/uiScaler'
 import { setBgmMuted } from './core/BgmManager'
 import { GAME_WIDTH, computeDesignHeight } from './core/viewport'
-import { saveScore, getLeaderboard, track } from './api/request'
+import {
+  saveScore,
+  getLeaderboard,
+  track,
+  fetchMe,
+  updateMe,
+  deleteAccount,
+  fetchMissions,
+  claimMission,
+} from './api/request'
 import { SDKManager } from './sdk/SDKManager'
-import type { RankItem } from './types/api'
+import type { MissionItem, PlayerSummary, RankItem } from './types/api'
 
 // 设计稿高度随设备宽高比动态取（1280~1600，见 core/viewport.ts），
 // 全面屏手机画面铺满全屏，不再在道具栏下方留下大片空白。
@@ -78,6 +87,20 @@ async function bootstrap(): Promise<void> {
 
 void bootstrap()
 
+/** 日本都道府県（JIS X 0401）— 区域排行与资料选择共用 */
+const JP_PREFECTURES: Array<{ code: string; name: string }> = [
+  ['jp-01','北海道'],['jp-02','青森県'],['jp-03','岩手県'],['jp-04','宮城県'],['jp-05','秋田県'],
+  ['jp-06','山形県'],['jp-07','福島県'],['jp-08','茨城県'],['jp-09','栃木県'],['jp-10','群馬県'],
+  ['jp-11','埼玉県'],['jp-12','千葉県'],['jp-13','東京都'],['jp-14','神奈川県'],['jp-15','新潟県'],
+  ['jp-16','富山県'],['jp-17','石川県'],['jp-18','福井県'],['jp-19','山梨県'],['jp-20','長野県'],
+  ['jp-21','岐阜県'],['jp-22','静岡県'],['jp-23','愛知県'],['jp-24','三重県'],['jp-25','滋賀県'],
+  ['jp-26','京都府'],['jp-27','大阪府'],['jp-28','兵庫県'],['jp-29','奈良県'],['jp-30','和歌山県'],
+  ['jp-31','鳥取県'],['jp-32','島根県'],['jp-33','岡山県'],['jp-34','広島県'],['jp-35','山口県'],
+  ['jp-36','徳島県'],['jp-37','香川県'],['jp-38','愛媛県'],['jp-39','高知県'],['jp-40','福岡県'],
+  ['jp-41','佐賀県'],['jp-42','長崎県'],['jp-43','熊本県'],['jp-44','大分県'],['jp-45','宮崎県'],
+  ['jp-46','鹿児島県'],['jp-47','沖縄県'],
+].map(([code, name]) => ({ code, name }))
+
 Alpine.data('gameUI', () => ({
   /** Sound on/off; initial value persisted in localStorage('hd_sound_on'). */
   isSoundOn: localStorage.getItem('hd_sound_on') !== '0',
@@ -101,6 +124,25 @@ Alpine.data('gameUI', () => ({
   _toastTimer: 0,
   /** 最近一局的结算上下文（复活弹窗「放弃」时用它按 fail 上报时长） */
   _lastRun: { score: 0, level: 1, sessionId: '' },
+  /** 当前所在关卡（LEVEL_STARTED 时更新，供排行榜默认维度使用） */
+  currentLevel: 1,
+  /** 我的资料 + 累计统计（/api/user/me，启动后拉取一次） */
+  me: null as PlayerSummary | null,
+  /** 都道府県选项（资料面板区域选择） */
+  prefectures: JP_PREFECTURES,
+  /** 排行榜显示维度：national 全国 / my 我的区域 */
+  rankScope: 'national' as 'national' | 'my',
+  /** 我的名次（服务端返回，可能为 null） */
+  myRank: null as number | null,
+  /** 排行榜区域榜是否可用（尚未选择区域时为 false） */
+  rankScopeReady: false,
+  profileOpen: false,
+  profileNickname: '',
+  profileRegion: '',
+  profileSaving: false,
+  missionsOpen: false,
+  missions: [] as MissionItem[],
+  missionsLoading: false,
 
   init() {
     EventBus.on('GAME_OVER', (elapsed: number, level: number, sessionId: string) => {
@@ -137,12 +179,16 @@ Alpine.data('gameUI', () => ({
       this.showToast(text)
     })
     EventBus.on('LEVEL_STARTED', (level: number, title: string) => {
+      this.currentLevel = level
       if (level === 1) {
         this.showToast('チュートリアル：光るカードをタップして、同じ絵柄を3つそろえましょう', 2600)
       } else {
         this.showToast(`第${level}ステージ · ${title || ''}`, 2000)
       }
     })
+
+    // 启动后拉取我的资料/统计（登录已在 bootstrap 完成）
+    void this.refreshMe()
   },
 
   /** 道具按钮：通知场景执行对应效果。 */
@@ -200,13 +246,27 @@ Alpine.data('gameUI', () => ({
       })
   },
 
-  /** Fetch the leaderboard and show the panel. */
-  showLeaderboard() {
+  /** 打开排行榜（默认全国；可传 'my' 切换我的区域榜） */
+  showLeaderboard(scope: 'national' | 'my' = 'national') {
     this.leaderboardVisible = true
-    this.leaderboard = []
-    getLeaderboard()
-      .then((data) => {
-        this.leaderboard = data
+    this.loadLeaderboard(scope)
+  },
+
+  /** 区域 Tab 切换 */
+  setRankScope(scope: 'national' | 'my') {
+    if (scope === 'my' && !this.rankScopeReady) return
+    this.rankScope = scope
+    this.loadLeaderboard(scope)
+  },
+
+  loadLeaderboard(scope: 'national' | 'my') {
+    const region =
+      scope === 'my' ? (this.me?.user.region_code ?? '') : ''
+    if (scope === 'my' && !region) return
+    getLeaderboard(this.currentLevel, region)
+      .then((res) => {
+        this.leaderboard = res.rank
+        this.myRank = res.my_rank
       })
       .catch((err: unknown) => {
         console.warn('[rank] 获取排行榜失败:', err)
@@ -215,6 +275,98 @@ Alpine.data('gameUI', () => ({
 
   closeLeaderboard() {
     this.leaderboardVisible = false
+  },
+
+  /** 拉取我的资料（profileOpen 时补全；统计用于弹窗展示） */
+  async refreshMe() {
+    try {
+      this.me = await fetchMe()
+      this.rankScopeReady = Boolean(this.me?.user.region_code)
+    } catch (err) {
+      console.warn('[me] 获取玩家信息失败:', err)
+    }
+  },
+
+  openProfile() {
+    this.profileOpen = true
+    this.profileNickname = this.me?.user.nickname ?? ''
+    this.profileRegion = this.me?.user.region_code ?? ''
+  },
+
+  async saveProfile() {
+    const nickname = this.profileNickname.trim()
+    if (!nickname) return
+    this.profileSaving = true
+    try {
+      const user = await updateMe({ nickname, region_code: this.profileRegion })
+      if (this.me) this.me.user = { ...this.me.user, ...user }
+      this.rankScopeReady = Boolean(user.region_code)
+      this.showToast('保存しました')
+    } catch (err) {
+      console.warn('[me] 保存资料失败:', err)
+      this.showToast('保存に失敗しました')
+    } finally {
+      this.profileSaving = false
+    }
+  },
+
+  async requestDeleteAccount() {
+    const ok = window.confirm('本当にアカウントを削除しますか？\nすべてのデータが削除され、取り消せません。')
+    if (!ok) return
+    try {
+      await deleteAccount()
+      location.reload()
+    } catch (err) {
+      console.warn('[me] 注销失败:', err)
+      this.showToast('削除に失敗しました')
+    }
+  },
+
+  /** 打开每日任务面板 */
+  async openMissions() {
+    this.missionsOpen = true
+    await this.reloadMissions()
+  },
+
+  async reloadMissions() {
+    this.missionsLoading = true
+    try {
+      this.missions = await fetchMissions('daily')
+    } catch (err) {
+      console.warn('[missions] 获取任务失败:', err)
+      this.missions = []
+    } finally {
+      this.missionsLoading = false
+    }
+  },
+
+  /** 领取任务奖励并刷新列表 */
+  async claimMissionItem(m: MissionItem) {
+    try {
+      await claimMission(m.mission_key, m.period)
+      this.showToast(`「${m.reward_prop_key}」+${m.reward_amount} を受け取りました`)
+      await this.reloadMissions()
+      void this.refreshMe()
+    } catch (err) {
+      console.warn('[missions] 领取失败:', err)
+      this.showToast('受け取りに失敗しました')
+    }
+  },
+
+  /** 区域名显示（区域榜 Tab） */
+  regionName(code: string) {
+    return JP_PREFECTURES.find((p) => p.code === code)?.name ?? code
+  },
+
+  /** 道具奖励文案（任务面板） */
+  rewardName(key: string) {
+    const map: Record<string, string> = {
+      move_out: '移出',
+      undo: '撤回',
+      shuffle: 'シャッフル',
+      peek: '透視',
+    }
+    return map[key] ?? key
   },
 
   /** Format a best_time value for display. */

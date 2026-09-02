@@ -26,7 +26,7 @@ const BASE_URL: string =
   import.meta.env.VITE_API_BASE_URL ??
   `${location.protocol}//${location.hostname}:8089`
 
-import type { ApiResponse, RankItem } from '../types/api'
+import type { ApiResponse, MissionItem, PlayerSummary, RankResponse } from '../types/api'
 
 /** startGameSession hard timeout (fast fail, no retry). */
 const START_TIMEOUT_MS = 3000
@@ -36,7 +36,7 @@ const RETRY_BASE_DELAY_MS = 1000
 const RETRY_TIMEOUT_MS = 10_000
 
 interface RequestOptions {
-  method?: 'GET' | 'POST'
+  method?: 'GET' | 'POST' | 'PATCH' | 'DELETE'
   data?: unknown
   /** External abort signal (caller-owned timeout / cancellation). */
   signal?: AbortSignal
@@ -164,6 +164,14 @@ function getOrCreateDeviceId(): string {
 }
 
 /**
+ * Current device/guest UUID. LINE 平台登录时随 id_token 一并上报，
+ * 服务端把本机游客数据并入 LINE 账号（A8：防丢号/跨端升级）。
+ */
+export function getDeviceId(): string {
+  return getOrCreateDeviceId()
+}
+
+/**
  * Guest silent login (platform-agnostic): exchange the stable client UUID
  * for a JWT via POST /api/auth/guest-login, store it, and return the token.
  * Used by WebAdapter.login() and the 401 auto-refresh path.
@@ -262,10 +270,52 @@ export async function saveScore(
   })
 }
 
-/** Fetch the leaderboard of the given level (each user's best time). */
-export async function getLeaderboard(levelId = 1, limit = 50): Promise<RankItem[]> {
-  const data = await request<RankItem[]>(`/api/record/rank?level_id=${levelId}&limit=${limit}`)
-  return Array.isArray(data) ? data : []
+/** Fetch the leaderboard of the given level (national or a region). */
+export async function getLeaderboard(
+  levelId = 1,
+  region = '',
+  limit = 50,
+): Promise<RankResponse> {
+  const query = new URLSearchParams({ level_id: String(levelId), limit: String(limit) })
+  if (region) query.set('region', region)
+  const data = await request<RankResponse>(`/api/record/rank?${query.toString()}`)
+  return data ?? { rank: [], my_rank: null }
+}
+
+/** GET /api/user/me：资料 + 累计统计 + 道具/钱包余额。 */
+export async function fetchMe(): Promise<PlayerSummary> {
+  await ensureToken()
+  return request<PlayerSummary>('/api/user/me')
+}
+
+/** PATCH /api/user/me：修改昵称 / 区域。 */
+export async function updateMe(partial: {
+  nickname?: string
+  region_code?: string
+  country_code?: string
+}): Promise<PlayerSummary['user']> {
+  return request<PlayerSummary['user']>('/api/user/me', {
+    method: 'PATCH',
+    data: partial,
+  })
+}
+
+/** DELETE /api/user/me：账号注销（二次确认后删除本人全部数据）。 */
+export async function deleteAccount(): Promise<void> {
+  await request('/api/user/me', { method: 'DELETE', data: { confirm: true } })
+  localStorage.removeItem(TOKEN_KEY)
+  localStorage.removeItem(DEVICE_ID_KEY)
+}
+
+/** GET /api/missions：任务列表（含进度与领取状态）。 */
+export async function fetchMissions(scope: 'daily' | 'weekly' | 'achievement' = 'daily'): Promise<MissionItem[]> {
+  const data = await request<{ items: MissionItem[] }>(`/api/missions?scope=${scope}`)
+  return data?.items ?? []
+}
+
+/** POST /api/missions/claim：领取任务奖励。 */
+export async function claimMission(missionKey: string, period: string): Promise<void> {
+  await request('/api/missions/claim', { method: 'POST', data: { mission_key: missionKey, period } })
 }
 
 /*

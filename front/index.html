@@ -48,16 +48,36 @@
         实际缩放同 Phaser Scale.FIT。内部元素统一使用设计稿像素/百分比。
       -->
       <div id="ui-container" class="pointer-events-none absolute left-1/2 top-1/2 w-[720px]">
-      <!-- 游戏内 HUD：右上角静音按钮 + 底部道具栏（转场期间隐藏，避免悬浮在遮罩上） -->
+      <!-- 游戏内 HUD：右上角按钮组 + 底部道具栏（转场期间隐藏，避免悬浮在遮罩上） -->
       <div x-show="!isTransitioning" class="pointer-events-none absolute inset-0 [container-type:size]">
-        <!-- 🔊/🔇 一键静音按钮（右上角，即时生效并持久化） -->
-        <button
-          @click="toggleSound(isSoundOn)"
-          class="pointer-events-auto absolute right-4 top-4 flex h-[9cqw] cursor-pointer items-center justify-center rounded-full border-none bg-black/40 px-[2cqw] text-[3.6cqw] font-bold text-white"
-          style="line-height:1;"
-          x-text="isSoundOn ? '🔊' : '🔇'"
-          :aria-label="isSoundOn ? 'ミュート' : 'ミュート解除'"
-        ></button>
+        <!-- 右上角按钮组：排行榜 / 我的资料 / 静音 -->
+        <div class="pointer-events-auto absolute right-4 top-4 flex gap-[2.5cqw]">
+          <button
+            @click="showLeaderboard('national')"
+            class="flex h-[9cqw] w-[9cqw] cursor-pointer items-center justify-center rounded-full border-none bg-black/40 text-[4.6cqw]"
+            style="line-height:1;"
+            aria-label="ランキング"
+          >🏆</button>
+          <button
+            @click="openMissions()"
+            class="flex h-[9cqw] w-[9cqw] cursor-pointer items-center justify-center rounded-full border-none bg-black/40 text-[4.2cqw]"
+            style="line-height:1;"
+            aria-label="ミッション"
+          >📋</button>
+          <button
+            @click="openProfile()"
+            class="flex h-[9cqw] w-[9cqw] cursor-pointer items-center justify-center rounded-full border-none bg-black/40 text-[4.2cqw]"
+            style="line-height:1;"
+            aria-label="プロフィール"
+          >👤</button>
+          <button
+            @click="toggleSound(isSoundOn)"
+            class="flex h-[9cqw] w-[9cqw] cursor-pointer items-center justify-center rounded-full border-none bg-black/40 text-[3.6cqw] font-bold text-white"
+            style="line-height:1;"
+            x-text="isSoundOn ? '🔊' : '🔇'"
+            :aria-label="isSoundOn ? 'ミュート' : 'ミュート解除'"
+          ></button>
+        </div>
         <!-- 底部道具栏（原 props.js 复刻：移出/撤回/洗牌/透视，0 次罩灰 + 右上角角标） -->
         <div class="pointer-events-auto absolute left-1/2 top-[90%] flex -translate-x-1/2 gap-[5cqw]">
           <template x-for="(icon, i) in propIcons" :key="icon">
@@ -128,13 +148,28 @@
         </div>
       </div>
 
-      <!-- 排行榜面板 -->
+      <!-- 排行榜面板（全国 / 我的区域 切换 + 我的名次） -->
       <div
         x-show="leaderboardVisible"
         class="pointer-events-auto absolute inset-0 flex items-center justify-center bg-black/60"
       >
-        <div class="flex max-h-[70%] w-[80%] max-w-[440px] flex-col rounded-[14px] bg-white p-5 text-center font-sans">
+        <div class="flex max-h-[75%] w-[82%] max-w-[460px] flex-col rounded-[14px] bg-white p-5 text-center font-sans">
           <h2 class="m-0 mb-3 text-[20px] font-bold text-[#7a5c1e]">ランキング（最速クリア）</h2>
+          <!-- 维度切换 -->
+          <div class="mb-3 flex justify-center gap-2 text-sm font-bold">
+            <button
+              @click="setRankScope('national')"
+              :class="rankScope === 'national' ? 'bg-[#e8b33d] text-white' : 'bg-[#eee] text-[#777]'"
+              class="cursor-pointer rounded-full border-none px-5 py-1.5"
+            >全国</button>
+            <button
+              @click="setRankScope('my')"
+              :disabled="!rankScopeReady"
+              :class="rankScope === 'my' && rankScopeReady ? 'bg-[#e8b33d] text-white' : 'bg-[#eee] text-[#777]'"
+              class="cursor-pointer rounded-full border-none px-5 py-1.5 disabled:cursor-not-allowed"
+              x-text="rankScopeReady ? ('マイ地域' + (me ? '（' + regionName(me.user.region_code) + '）' : '')) : 'マイ地域（未設定）'"
+            ></button>
+          </div>
           <ul class="m-0 mb-4 list-none flex-1 overflow-y-auto p-0">
             <template x-for="(item, idx) in leaderboard" :key="idx">
               <li class="flex justify-between border-b border-[#eee] px-1 py-2 text-sm text-[#444]">
@@ -144,7 +179,76 @@
             </template>
           </ul>
           <div x-show="leaderboard.length === 0" class="py-2 text-sm text-[#999]">クリア記録はまだありません</div>
+          <div x-show="myRank" class="mb-3 text-sm font-bold text-[#7a5c1e]">
+            あなたの順位：<span x-text="myRank"></span>位
+          </div>
           <button @click="closeLeaderboard" class="w-full cursor-pointer rounded-[10px] bg-[#e8b33d] py-3 text-base font-bold text-white">閉じる</button>
+        </div>
+      </div>
+
+      <!-- 我的资料面板（昵称 / 区域 / 注销） -->
+      <div
+        x-show="profileOpen"
+        class="pointer-events-auto absolute inset-0 flex items-center justify-center bg-black/60 font-sans"
+      >
+        <div class="w-[80%] max-w-[440px] rounded-[14px] bg-white p-6 text-center">
+          <h2 class="m-0 mb-4 text-[20px] font-bold text-[#7a5c1e]">プロフィール</h2>
+          <p class="m-0 mb-2 text-left text-[13px] text-[#888]">ニックネーム</p>
+          <input
+            x-model="profileNickname"
+            maxlength="32"
+            class="mb-4 w-full rounded-[10px] border border-[#ddd] px-3 py-2.5 text-base outline-none focus:border-[#e8b33d]"
+            placeholder="ニックネーム"
+          />
+          <p class="m-0 mb-2 text-left text-[13px] text-[#888]">都道府県（地域ランキング）</p>
+          <select x-model="profileRegion" class="mb-5 w-full rounded-[10px] border border-[#ddd] bg-white px-3 py-2.5 text-base outline-none">
+            <option value="">選択しない</option>
+            <template x-for="p in prefectures" :key="p.code">
+              <option :value="p.code" x-text="p.name"></option>
+            </template>
+          </select>
+          <button
+            @click="saveProfile()"
+            :disabled="profileSaving"
+            class="w-full cursor-pointer rounded-[10px] bg-[#e8b33d] py-3 text-base font-bold text-white disabled:opacity-50"
+            x-text="profileSaving ? '保存中...' : '保存する'"
+          ></button>
+          <div class="mt-4">
+            <button @click="requestDeleteAccount()" class="cursor-pointer border-none bg-transparent text-[13px] text-[#e17055] underline">アカウントを削除</button>
+          </div>
+          <button @click="profileOpen = false" class="mt-2 w-full cursor-pointer rounded-[10px] border border-[#ddd] bg-white py-2.5 text-sm font-bold text-[#666]">閉じる</button>
+        </div>
+      </div>
+
+      <!-- 每日任务面板 -->
+      <div
+        x-show="missionsOpen"
+        class="pointer-events-auto absolute inset-0 flex items-center justify-center bg-black/60 font-sans"
+      >
+        <div class="flex max-h-[75%] w-[84%] max-w-[460px] flex-col rounded-[14px] bg-white p-5 text-center">
+          <h2 class="m-0 mb-3 text-[20px] font-bold text-[#7a5c1e]">ミッション（毎日）</h2>
+          <ul class="m-0 mb-4 list-none flex-1 overflow-y-auto p-0">
+            <template x-for="m in missions" :key="m.mission_key">
+              <li class="mb-2 flex items-center justify-between rounded-[10px] bg-[#faf7f0] px-3 py-2.5">
+                <div class="text-left">
+                  <p class="m-0 text-[14px] font-bold text-[#444]" x-text="m.title"></p>
+                  <p class="m-0 mt-0.5 text-[12px] text-[#999]">
+                    進捗 <span x-text="Math.min(m.progress, m.target_value) + ' / ' + m.target_value"></span>
+                  </p>
+                  <p class="m-0 mt-0.5 text-[12px] text-[#d89b2e]" x-text="'報酬：' + rewardName(m.reward_prop_key) + ' ×' + m.reward_amount"></p>
+                </div>
+                <button
+                  @click="claimMissionItem(m)"
+                  :disabled="!m.completed || m.claimed"
+                  :class="m.claimed ? 'bg-[#ccc]' : (m.completed ? 'bg-[#00b894]' : 'bg-[#ccc]')"
+                  class="ml-2 shrink-0 cursor-pointer rounded-full border-none px-4 py-2 text-[13px] font-bold text-white disabled:cursor-not-allowed"
+                  x-text="m.claimed ? '済み' : (m.completed ? '受け取る' : '未達成')"
+                ></button>
+              </li>
+            </template>
+          </ul>
+          <div x-show="!missionsLoading && missions.length === 0" class="py-2 text-sm text-[#999]">ミッションはありません</div>
+          <button @click="missionsOpen = false" class="w-full cursor-pointer rounded-[10px] bg-[#e8b33d] py-3 text-base font-bold text-white">閉じる</button>
         </div>
       </div>
       </div>
