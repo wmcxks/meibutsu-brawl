@@ -25,7 +25,7 @@ async def guest_register(db: AsyncSession = Depends(get_db)):
 async def guest_login(req: GuestLoginRequest, db: AsyncSession = Depends(get_db)):
     """H5 游客静默登录（guest_uuid 换 token）"""
     try:
-        data = await auth_service.guest_login(req.guest_uuid, db)
+        data = await auth_service.guest_login(req.guest_uuid, db, profile=req)
         return success(data=data)
     except Exception as e:
         return error(message=str(e))
@@ -35,7 +35,7 @@ async def guest_login(req: GuestLoginRequest, db: AsyncSession = Depends(get_db)
 async def line_login(req: LineLoginRequest, db: AsyncSession = Depends(get_db)):
     """LINE LIFF 登录（id_token 换统一 JWT）"""
     try:
-        data = await auth_service.line_login(req.id_token, db)
+        data = await auth_service.line_login(req.id_token, db, profile=req)
         return success(data=data)
     except HTTPException:
         # 凭证无效/服务不可用等语义错误保持原 HTTP 状态码透传
