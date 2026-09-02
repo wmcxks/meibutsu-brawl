@@ -6,15 +6,24 @@ import MenuScene from './scenes/MenuScene'
 import GameScene from './scenes/GameScene'
 import { EventBus } from './core/EventBus'
 import { initUiScaler } from './core/uiScaler'
+import { setBgmMuted } from './core/BgmManager'
+import { GAME_WIDTH, computeDesignHeight } from './core/viewport'
 import { saveScore, getLeaderboard } from './api/request'
 import { SDKManager } from './sdk/SDKManager'
 import type { RankItem } from './types/api'
 
+// 设计稿高度随设备宽高比动态取（1280~1600，见 core/viewport.ts），
+// 全面屏手机画面铺满全屏，不再在道具栏下方留下大片空白。
+const appHostEl = document.getElementById('app')
+const hostW = appHostEl?.clientWidth || window.innerWidth
+const hostH = appHostEl?.clientHeight || window.innerHeight
+const DESIGN_HEIGHT = computeDesignHeight(hostW, hostH)
+
 const config: Phaser.Types.Core.GameConfig = {
   type: Phaser.WEBGL,
   parent: 'app',
-  width: 720,
-  height: 1280,
+  width: GAME_WIDTH,
+  height: DESIGN_HEIGHT,
   /* 画布完全透明：让底层的 CSS 旋转渐变背景(#bg-container)完美透视出来 */
   transparent: true,
   scale: {
@@ -58,10 +67,10 @@ async function bootstrap(): Promise<void> {
   window.Alpine = Alpine
   Alpine.start()
 
-  // UI 层缩放对齐 Phaser FIT 画布（720x1280 设计稿 <-> #app 视口）
+  // UI 层缩放对齐 Phaser FIT 画布（720×designH 设计稿 <-> #app 视口）
   const uiContainer = document.getElementById('ui-container')
   const appHost = document.getElementById('app')
-  if (uiContainer && appHost) initUiScaler(uiContainer, appHost)
+  if (uiContainer && appHost) initUiScaler(uiContainer, appHost, DESIGN_HEIGHT)
 }
 
 void bootstrap()
@@ -119,9 +128,9 @@ Alpine.data('gameUI', () => ({
     })
     EventBus.on('LEVEL_STARTED', (level: number, title: string) => {
       if (level === 1) {
-        this.showToast('教学关：点击亮起的卡牌，凑齐三个相同图标即可消除', 2600)
+        this.showToast('チュートリアル：光るカードをタップして、同じ絵柄を3つそろえましょう', 2600)
       } else {
-        this.showToast(`第 ${level} 关 · ${title || ''}`, 2000)
+        this.showToast(`第${level}ステージ · ${title || ''}`, 2000)
       }
     })
   },
@@ -132,13 +141,14 @@ Alpine.data('gameUI', () => ({
   },
 
   /**
-   * 一键静音：直接驱动 Phaser 全局声音管理器 + localStorage 持久化。
+   * 一键静音：直接驱动 Phaser 全局声音管理器 + DOM 背景乐 + localStorage 持久化。
    * @param isMuted 期望的静音状态（点击时传当前 isSoundOn：开→关 传 true）
    */
   toggleSound(isMuted: boolean) {
     this.isSoundOn = !isMuted
     localStorage.setItem('hd_sound_on', this.isSoundOn ? '1' : '0')
     if (gameInstance) gameInstance.sound.mute = isMuted
+    setBgmMuted(isMuted)
   },
 
   /** 网络异常弹窗「重新连接」：关闭弹窗并通知场景重新拉取开局会话。 */

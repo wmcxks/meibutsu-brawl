@@ -2,12 +2,19 @@
 
 > **English** | [中文文档](README.md)
 
-A "Sheep a Sheep" (羊了个羊) style multi-layer card matching H5 game: stacked card boards + bottom-slot triple matching, multi-level progression, prop system, clear-time leaderboard, and a **block-sweep level transition animation**. The frontend is a modern **Phaser 4 + Vite + TypeScript** H5 project; the backend is **FastAPI + SQLAlchemy 2.x (async) + MySQL + Redis**.
+A multi-layer card matching (消消乐) H5 game: stacked card boards + bottom-slot triple matching, multi-level progression, prop system, clear-time leaderboard, and a **block-sweep level transition animation**. The frontend is a modern **Phaser 4 + Vite + TypeScript** H5 project; the backend is **FastAPI + SQLAlchemy 2.x (async) + MySQL + Redis**.
 
 > Architecture goal: **one codebase, multiple platforms** (Web now; LINE LIFF reserved via the SDK adapter layer).
 
+## Run Demo
+
+<video src="docs/demo.mp4" controls muted preload="metadata" width="360"></video>
+
+(Screen recording of the actual game)
+
 ## Table of Contents
 
+- [Run Demo](#run-demo)
 - [Tech Stack](#tech-stack)
 - [Project Structure](#project-structure)
 - [Quick Start](#quick-start)
@@ -64,7 +71,7 @@ A "Sheep a Sheep" (羊了个羊) style multi-layer card matching H5 game: stacke
 │   └── sql/schema.sql            # DDL (hd_ prefix, isolated within the shared MySQL instance)
 │
 ├── scripts/                      # Ops scripts + backend virtualenv venv/
-└── docs/                         # Requirements / backend / database / frontend docs
+└── docs/                         # Run demo video (demo.mp4)
 ```
 
 ## Quick Start

@@ -5,11 +5,12 @@ import { PropManager } from "../core/PropManager";
 import { EventBus, GameEvents } from "../core/EventBus";
 import { LEVELS } from "../core/levels";
 import { getCurrentTheme } from "../core/themes";
+import { startGameBgm } from "../core/BgmManager";
 import { startGameSession } from "../api/request";
 import { BlockTransition } from "../core/BlockTransition";
 
 /** Card drawing constants (mirror client/scenes/game/renders/cards.js). */
-const CARD_SIZE_SCALE = 0.12;
+const CARD_SIZE_SCALE = 0.13;
 const CARD_3D_DEPTH = 0.1;
 const CARD_RADIUS = 8;
 const CARD_ICON_PAD = 0.07;
@@ -76,7 +77,7 @@ export default class GameScene extends Phaser.Scene {
   private startAt = 0;
   /** Backend session id for the current run (anti-cheat); null until fetched. */
   private currentSessionId: string | null = null;
-  /** "关卡生成中..." overlay shown while the session request is in flight. */
+  /** "ステージ生成中..." overlay shown while the session request is in flight. */
   private loadingText: Phaser.GameObjects.Text | null = null;
   /** Guards stale session awaits after the scene is shut down / restarted. */
   private loadSeq = 0;
@@ -112,6 +113,9 @@ export default class GameScene extends Phaser.Scene {
 
     // 应用持久化的音效开关（与 main.ts toggleSound 的 localStorage 键一致）
     this.sound.mute = localStorage.getItem("hd_sound_on") === "0";
+
+    // 进入游戏:随机启动一首循环 BGM（已有曲目则保持，restart 不换曲）
+    startGameBgm();
 
     // scene.restart() reuses THIS instance, so all per-run state must be reset
     // here; otherwise the previous run's pause/revive/sprites leak into the new one.
@@ -149,7 +153,7 @@ export default class GameScene extends Phaser.Scene {
 
     if (this.loadingText) this.loadingText.destroy();
     this.loadingText = this.add
-      .text(this.scale.width / 2, this.scale.height / 2, "关卡生成中...", {
+      .text(this.scale.width / 2, this.scale.height / 2, "ステージ生成中...", {
         fontSize: "28px",
         color: "#ffffff",
       })
@@ -268,7 +272,7 @@ export default class GameScene extends Phaser.Scene {
 
   /** Bottom slot tray background (slots.png), sized for 7 slots. */
   private buildTray(): void {
-    const slotSize = Math.round(this.scale.width * 0.11);
+    const slotSize = Math.round(this.scale.width * 0.12);
     const slotGap = Math.round(this.scale.width * 0.014);
     const maxSlots = 7;
     const totalSlotWidth = maxSlots * (slotSize + slotGap);
@@ -544,7 +548,7 @@ export default class GameScene extends Phaser.Scene {
   private readonly handleUseProp = (index: number): void => {
     if (this.paused) return;
     if (this.props.getCount(index) <= 0) {
-      EventBus.emit(GameEvents.TOAST, "次数已用完");
+      EventBus.emit(GameEvents.TOAST, "使用回数がありません");
       return;
     }
 
@@ -574,7 +578,7 @@ export default class GameScene extends Phaser.Scene {
   private useMoveOut(): boolean {
     const moved = this.engine.moveOut(3);
     if (moved.length === 0) {
-      EventBus.emit(GameEvents.TOAST, "槽位为空");
+      EventBus.emit(GameEvents.TOAST, "スロットが空です");
       return false;
     }
 
@@ -628,7 +632,7 @@ export default class GameScene extends Phaser.Scene {
   private useUndo(): boolean {
     const card = this.engine.undo();
     if (!card) {
-      EventBus.emit(GameEvents.TOAST, "无可撤回的操作");
+      EventBus.emit(GameEvents.TOAST, "取り消せる操作がありません");
       return false;
     }
     const view = this.sprites.get(card.id);
@@ -652,7 +656,7 @@ export default class GameScene extends Phaser.Scene {
   /** Prop 2 (洗牌): reshuffle types among board cards, updating textures. */
   private useShuffle(): boolean {
     if (!this.engine.shuffle(this.scale.height * 0.68)) {
-      EventBus.emit(GameEvents.TOAST, "无可洗的卡牌");
+      EventBus.emit(GameEvents.TOAST, "シャッフルできるカードがありません");
       return false;
     }
     const iconSize = this.cardSize - this.cardPad * 2;
@@ -672,11 +676,11 @@ export default class GameScene extends Phaser.Scene {
   /** Prop 3 (透视): enter peek mode — next top-card click reveals its 3x3 area. */
   private usePeek(): boolean {
     if (this.engine.getAliveCards().length === 0) {
-      EventBus.emit(GameEvents.TOAST, "无可透视的卡牌");
+      EventBus.emit(GameEvents.TOAST, "透視できるカードがありません");
       return false;
     }
     this.peekMode = true;
-    EventBus.emit(GameEvents.TOAST, "请点击一张顶层卡牌");
+    EventBus.emit(GameEvents.TOAST, "最上段のカードをタップしてください");
     return true;
   }
 

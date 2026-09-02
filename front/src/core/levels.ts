@@ -142,13 +142,16 @@ const topCover: RegionConfig = {
 /** All levels, in play order. */
 export const LEVELS: LevelConfig[] = [
   {
-    title: "新手教学",
+    title: "チュートリアル",
     iconTypes: 3,
     regions: [
       {
-        // One centered region: 3 layers of 3x3 with generous gaps (learning layout).
-        x: 0.18,
-        y: 0.25,
+        // One centered region: 3x3 with generous gaps (learning layout).
+        // 精确水平居中：3x3 行宽 = (2*(1+gapRatio)+1)*size = 4.6*size，
+        // x = (360 - 4.6*size/2 - BOARD_SIDE*720) / (720*(1-2*BOARD_SIDE))。
+        // size=0.13W=94、BOARD_SIDE=0.04 时 x≈0.174。若改卡牌尺寸需同步重算。
+        x: 0.174,
+        y: 0.22,
         layers: [
           { layer: 0, gapRatio: 0.8, cards: grid(3, 3) },
           // { layer: 1, gapRatio: 0.8, offsetRow: 0.3, cards: grid(3, 3) },
@@ -158,7 +161,7 @@ export const LEVELS: LevelConfig[] = [
     ],
   },
   {
-    title: "终极挑战",
+    title: "究極の挑戦",
     iconTypes: 12,
     regions: [
       diagonalStack(0.05), // region 1: left-top diagonal

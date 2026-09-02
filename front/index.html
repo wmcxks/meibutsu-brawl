@@ -43,12 +43,11 @@
     <!-- HTML UI overlay (Alpine.js + TailwindCSS) above the canvas -->
     <div id="ui-layer" x-data="gameUI" class="pointer-events-none fixed inset-0 z-50">
       <!--
-        ui-container：720x1280 设计稿死尺寸容器。
-        实际缩放由 src/core/uiScaler.ts 计算（与 Phaser Scale.FIT 相同的
-        min(容器宽/720, 容器高/1280)），transform: scale() 后绝对居中，
-        保证与底部 canvas 严丝合缝。内部元素统一使用设计稿像素/百分比。
+        ui-container：720 宽、高度随设备动态(1280~1600)的容器。
+        高度由 src/core/uiScaler.ts 按与 Phaser 画布一致的 designH 写死，
+        实际缩放同 Phaser Scale.FIT。内部元素统一使用设计稿像素/百分比。
       -->
-      <div id="ui-container" class="pointer-events-none absolute left-1/2 top-1/2 h-[1280px] w-[720px]">
+      <div id="ui-container" class="pointer-events-none absolute left-1/2 top-1/2 w-[720px]">
       <!-- 游戏内 HUD：右上角静音按钮 + 底部道具栏（转场期间隐藏，避免悬浮在遮罩上） -->
       <div x-show="!isTransitioning" class="pointer-events-none absolute inset-0 [container-type:size]">
         <!-- 🔊/🔇 一键静音按钮（右上角，即时生效并持久化） -->
@@ -57,7 +56,7 @@
           class="pointer-events-auto absolute right-4 top-4 flex h-[9cqw] cursor-pointer items-center justify-center rounded-full border-none bg-black/40 px-[2cqw] text-[3.6cqw] font-bold text-white"
           style="line-height:1;"
           x-text="isSoundOn ? '🔊' : '🔇'"
-          :aria-label="isSoundOn ? '静音' : '取消静音'"
+          :aria-label="isSoundOn ? 'ミュート' : 'ミュート解除'"
         ></button>
         <!-- 底部道具栏（原 props.js 复刻：移出/撤回/洗牌/透视，0 次罩灰 + 右上角角标） -->
         <div class="pointer-events-auto absolute left-1/2 top-[90%] flex -translate-x-1/2 gap-[5cqw]">
@@ -84,8 +83,8 @@
         class="pointer-events-auto absolute inset-0 z-20 flex items-center justify-center bg-black/40"
       >
         <div class="w-[70%] max-w-[400px] rounded-[14px] bg-white p-6 text-center font-sans">
-          <p class="m-0 mb-5 text-[15px] text-[#555]">网络异常，关卡加载失败，请检查网络后重试。</p>
-          <button @click="retryConnection" class="w-full cursor-pointer rounded-[10px] bg-[#e8b33d] py-3 text-base font-bold text-white">重新连接</button>
+          <p class="m-0 mb-5 text-[15px] text-[#555]">ネットワークエラー。ステージの読み込みに失敗しました。通信環境を確認して、もう一度お試しください。</p>
+          <button @click="retryConnection" class="w-full cursor-pointer rounded-[10px] bg-[#e8b33d] py-3 text-base font-bold text-white">再接続</button>
         </div>
       </div>
 
@@ -103,16 +102,16 @@
         class="absolute inset-0 flex items-center justify-center bg-black/60 font-sans [container-type:size] pointer-events-auto"
       >
         <div class="relative w-[75cqw] h-[35cqh] bg-white rounded-[2.22cqw]">
-          <p class="absolute top-[22%] left-0 m-0 w-full -translate-y-1/2 text-center text-[6.5cqw] font-bold text-[#e17055]">槽位已满！</p>
-          <p class="absolute top-[44%] left-0 m-0 w-full -translate-y-1/2 text-center text-[3.8cqw] text-[#666]">是否复活</p>
+          <p class="absolute top-[22%] left-0 m-0 w-full -translate-y-1/2 text-center text-[6.5cqw] font-bold text-[#e17055]">スロットがいっぱい！</p>
+          <p class="absolute top-[44%] left-0 m-0 w-full -translate-y-1/2 text-center text-[3.8cqw] text-[#666]">復活しますか？</p>
           <button
             @click="cancelRevive"
             class="absolute top-[70%] left-[8%] h-[18%] w-[38%] cursor-pointer rounded-[1.11cqw] border-none bg-[#e0e0e0] text-[3.5cqw] font-bold text-[#333]"
-          >放弃复活</button>
+          >復活しない</button>
           <button
             @click="handleRevive"
             class="absolute top-[70%] left-[54%] h-[18%] w-[38%] cursor-pointer rounded-[1.11cqw] border-none bg-[#00b894] text-[3.5cqw] font-bold text-white"
-          >复活</button>
+          >復活する</button>
         </div>
       </div>
 
@@ -122,10 +121,10 @@
         class="pointer-events-auto absolute inset-0 flex items-center justify-center bg-black/55"
       >
         <div class="w-[72%] max-w-[420px] rounded-[14px] bg-white p-7 text-center font-sans">
-          <h2 class="m-0 mb-2 text-[22px] font-bold text-[#7a5c1e]">游戏失败</h2>
-          <p class="m-0 mb-5 text-[15px] text-[#555]">卡槽已满，本局挑战失败了，是否重新开始？</p>
-          <button @click="restartGame" class="w-full cursor-pointer rounded-[10px] bg-[#e8b33d] py-3 text-base font-bold text-white">重新开始</button>
-          <button @click="showLeaderboard" class="mt-2.5 w-full cursor-pointer rounded-[10px] border border-[#e8b33d] bg-white py-3 text-base font-bold text-[#b8860b]">查看排行榜</button>
+          <h2 class="m-0 mb-2 text-[22px] font-bold text-[#7a5c1e]">ゲームオーバー</h2>
+          <p class="m-0 mb-5 text-[15px] text-[#555]">スロットがいっぱいになり、ステージクリアに失敗しました。もう一度挑戦しますか？</p>
+          <button @click="restartGame" class="w-full cursor-pointer rounded-[10px] bg-[#e8b33d] py-3 text-base font-bold text-white">もう一度挑戦</button>
+          <button @click="showLeaderboard" class="mt-2.5 w-full cursor-pointer rounded-[10px] border border-[#e8b33d] bg-white py-3 text-base font-bold text-[#b8860b]">ランキングを見る</button>
         </div>
       </div>
 
@@ -135,7 +134,7 @@
         class="pointer-events-auto absolute inset-0 flex items-center justify-center bg-black/60"
       >
         <div class="flex max-h-[70%] w-[80%] max-w-[440px] flex-col rounded-[14px] bg-white p-5 text-center font-sans">
-          <h2 class="m-0 mb-3 text-[20px] font-bold text-[#7a5c1e]">排行榜（最快通关）</h2>
+          <h2 class="m-0 mb-3 text-[20px] font-bold text-[#7a5c1e]">ランキング（最速クリア）</h2>
           <ul class="m-0 mb-4 list-none flex-1 overflow-y-auto p-0">
             <template x-for="(item, idx) in leaderboard" :key="idx">
               <li class="flex justify-between border-b border-[#eee] px-1 py-2 text-sm text-[#444]">
@@ -144,8 +143,8 @@
               </li>
             </template>
           </ul>
-          <div x-show="leaderboard.length === 0" class="py-2 text-sm text-[#999]">暂无通关记录</div>
-          <button @click="closeLeaderboard" class="w-full cursor-pointer rounded-[10px] bg-[#e8b33d] py-3 text-base font-bold text-white">关闭</button>
+          <div x-show="leaderboard.length === 0" class="py-2 text-sm text-[#999]">クリア記録はまだありません</div>
+          <button @click="closeLeaderboard" class="w-full cursor-pointer rounded-[10px] bg-[#e8b33d] py-3 text-base font-bold text-white">閉じる</button>
         </div>
       </div>
       </div>

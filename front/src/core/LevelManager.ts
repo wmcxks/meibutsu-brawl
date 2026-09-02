@@ -18,10 +18,13 @@ const BLOCKED_THRESHOLD = 0.1
 
 /** Playable-area margins (relative to board size), mirroring the original design. */
 const BOARD_TOP = 0.1
-const BOARD_SIDE = 0.07
+const BOARD_SIDE = 0.04
 const BOARD_BOTTOM = 0.65
-/** Default card size = board width * 0.12. */
-const CARD_SIZE_SCALE = 0.12
+/**
+ * Default card size = board width * 0.13。
+ * 上限受第 2 关顶层 6x6 覆盖板约束:6 列行宽 6.5*size 必须 ≤ 可用宽度。
+ */
+const CARD_SIZE_SCALE = 0.13
 
 /**
  * LevelManager

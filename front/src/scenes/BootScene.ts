@@ -65,8 +65,8 @@ export default class BootScene extends Phaser.Scene {
     }
   }
 
-  /** All used SFX (BGM files are intentionally not loaded: they are unused
-   *  in this port and would add ~13MB to the initial load). */
+  /** 所有实际使用的 SFX（BGM 不经 Phaser 加载：由 core/BgmManager.ts 用
+   *  DOM <audio> 懒加载循环播放，避免首屏全量解码与下载）。 */
   private loadAudio(): void {
     this.load.audio('audio/game/click/normal.mp3', 'audio/game/click/normal.mp3')
     this.load.audio('audio/game/click/cow.mp3', 'audio/game/click/cow.mp3')

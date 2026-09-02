@@ -59,9 +59,9 @@ export class BlockTransition {
     this.opts = {
       width: 720,
       height: 1280,
-      blockSize: 128,
-      overlap: 0.3,
-      totalDuration: 1.4,
+      blockSize: 256,
+      overlap: 0.35,
+      totalDuration: 2.1,
       paddingColumns: 2,
       depth: 1_000_000,
       ...options,
@@ -97,9 +97,10 @@ export class BlockTransition {
     const cols = Math.ceil(width / step);
     const rows = Math.ceil(height / step);
 
-    // 1. 生成网格：左右各 paddingColumns 列“牧群余量”，
-    //    加宽队形可拉长完全遮挡的时间窗口，让底层换关更从容。
-    for (let row = 0; row < rows; row++) {
+    // 1. 生成网格:左右各 paddingColumns 列“牧群余量”,上下各补 1 行,
+    //    加宽加高队形可拉长完全遮挡的时间窗口,且素材边缘若带透明像素
+    //    也不会在屏幕顶部/底部露出缝隙。
+    for (let row = -1; row <= rows; row++) {
       for (let col = -paddingColumns; col < cols + paddingColumns; col++) {
         const sprite = this.scene.add.sprite(
           0,

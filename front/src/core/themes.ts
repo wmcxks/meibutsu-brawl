@@ -3,7 +3,10 @@
  * Card theme registry — pure data, no Phaser / DOM code.
  * Mirrors the original client/scenes/game/renders/themes.js: a global
  * "current theme" is picked once at boot, so BootScene only preloads the
- * icons of the theme actually used this run (instead of all 6 themes).
+ * icons of the theme actually used this run.
+ * 当前只启用 irasutoya（いらすとや）一个图片包；如需重新启用多包，
+ * 将更多 { name, iconCount } 加回 CARD_THEMES 即可（iconCount 必须与
+ * public/images/game/cards/themes/<name>/ 下的图片数一致）。
  */
 
 export interface CardTheme {
@@ -12,12 +15,7 @@ export interface CardTheme {
 }
 
 export const CARD_THEMES: CardTheme[] = [
-  { name: 'animals', iconCount: 18 },
-  { name: 'beach', iconCount: 14 },
-  { name: 'childhood', iconCount: 14 },
-  { name: 'fruits', iconCount: 14 },
-  { name: 'vegetable', iconCount: 14 },
-  { name: 'work', iconCount: 14 },
+  { name: 'irasutoya', iconCount: 30 },
 ]
 
 /** Default theme (fallback before pickRandom). */

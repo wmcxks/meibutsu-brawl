@@ -2,9 +2,15 @@
 
 > **中文** | [English](README.en.md)
 
-一款「羊了个羊」风格的多层卡牌消除 H5 游戏：多层卡牌 + 底部槽位三消、多关卡进阶、道具系统、通关计时、排行榜，以及**关卡转场动画**（方块羊群横扫遮屏）。前端为 **Phaser 4 + Vite + TypeScript** 的现代化 H5 项目，后端为 **FastAPI + SQLAlchemy 2.x（异步）+ MySQL + Redis**。
+一款多层卡牌消消乐 H5 游戏：多层堆叠卡牌 + 底部槽位三消、多关卡进阶、道具系统、通关计时、排行榜，以及**关卡转场动画**（方块横扫遮屏）。前端为 **Phaser 4 + Vite + TypeScript** 的现代化 H5 项目，后端为 **FastAPI + SQLAlchemy 2.x（异步）+ MySQL + Redis**。
 
 > 架构目标：一套代码、多端发布（当前支持 Web，预留 LINE LIFF 平台，通过 SDK 适配层切换）。
+
+## 运行演示
+
+<video src="docs/demo.mp4" controls muted preload="metadata" width="360"></video>
+
+（实际运行录屏，点击播放）
 
 ## 技术栈
 
@@ -51,7 +57,7 @@
 │   └── sql/schema.sql            # 建表 SQL（hd_ 前缀，与金毛项目共库隔离）
 │
 ├── scripts/                      # 运维脚本 + 后端虚拟环境 venv/
-└── docs/                         # 需求/后端/数据库/前端文档
+└── docs/                         # 运行演示视频（demo.mp4）
 ```
 
 ## 快速启动
