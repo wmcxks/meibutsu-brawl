@@ -10,16 +10,16 @@
 
 ![运行演示](docs/demo.gif)
 
-> GitHub README 不渲染 `<video>` 标签：上面为可自动播放的 GIF 预览（节选前 18 秒），完整录屏见 [docs/demo.mp4](docs/demo.mp4)。
+> 完整录屏见 [docs/demo.mp4](docs/demo.mp4)。
 
 ## 技术栈
 
-| 端 | 技术 |
-|---|---|
-| 前端 | Vite 8 · TypeScript · Phaser 4（场景/渲染/Tween）· Alpine.js（UI 层）· Tailwind CSS 4 · Web Crypto（签名） |
-| 前端 SDK | 适配器模式：`SDKManager` + `WebAdapter`（游客静默登录）/ `LineAdapter`（LINE LIFF） |
-| 后端 | FastAPI · SQLAlchemy 2.x（async/asyncmy）· MySQL · redis-py（Upstash TLS）· PyJWT |
-| 防刷 | 前端 SHA-256 签名 + 时间戳防重放；后端开局会话（Redis）+ 时序/限频校验 + 作弊日志落库 |
+| 端       | 技术                                                                                                       |
+| -------- | ---------------------------------------------------------------------------------------------------------- |
+| 前端     | Vite 8 · TypeScript · Phaser 4（场景/渲染/Tween）· Alpine.js（UI 层）· Tailwind CSS 4 · Web Crypto（签名） |
+| 前端 SDK | 适配器模式：`SDKManager` + `WebAdapter`（游客静默登录）/ `LineAdapter`（LINE LIFF）                        |
+| 后端     | FastAPI · SQLAlchemy 2.x（async/asyncmy）· MySQL · redis-py（Upstash TLS）· PyJWT                          |
+| 防刷     | 前端 SHA-256 签名 + 时间戳防重放；后端开局会话（Redis）+ 时序/限频校验 + 作弊日志落库                      |
 
 ## 项目结构
 
@@ -85,6 +85,7 @@ cp .env.example .env
 验证：`curl http://127.0.0.1:8089/health` 返回 `{"status":"ok"}`。
 
 **依赖环境**：
+
 - **MySQL**：`hd_` 前缀表（自动建表），库名见 `.env` 的 `MYSQL_DATABASE`
 - **Redis**：支持 Upstash（`REDIS_HOST` 含 `.upstash.io` 自动走 TLS），或本地 `localhost:6379`；未配置也可启动（防刷功能降级告警）
 
@@ -104,11 +105,11 @@ npm run preview
 
 **前端环境变量**（`.env`，参考 `.env.example`）：
 
-| 变量 | 说明 | 默认 |
-|---|---|---|
-| `VITE_API_BASE_URL` | 后端地址；不设置时按页面访问来源自动推导（`http://<当前host>:8089`） | 自动 |
-| `VITE_TARGET_PLATFORM` | 发布平台：`web`（游客登录）/ `line`（LINE LIFF） | `web` |
-| `VITE_LIFF_ID` | LINE LIFF App ID（仅 line 平台需要） | 空 |
+| 变量                   | 说明                                                                 | 默认  |
+| ---------------------- | -------------------------------------------------------------------- | ----- |
+| `VITE_API_BASE_URL`    | 后端地址；不设置时按页面访问来源自动推导（`http://<当前host>:8089`） | 自动  |
+| `VITE_TARGET_PLATFORM` | 发布平台：`web`（游客登录）/ `line`（LINE LIFF）                     | `web` |
+| `VITE_LIFF_ID`         | LINE LIFF App ID（仅 line 平台需要）                                 | 空    |
 
 ### 3. 局域网联调
 
@@ -124,14 +125,14 @@ cd front && npm run dev
 
 ## 主要 API
 
-| 方法 | 路径 | 说明 |
-|---|---|---|
-| POST | `/api/auth/guest-login` | 游客静默登录（`guest_uuid` 换 JWT） |
-| POST | `/api/auth/line` | LINE LIFF 登录（id_token 换 JWT，需配置 `LINE_CHANNEL_ID`） |
-| POST | `/api/record/start` | 开局：生成会话（Redis 存 start_time/level_id，TTL 1h） |
-| POST | `/api/record/submit` | 结算：签名校验 + 会话/时序/限频校验 + 落库 |
-| GET | `/api/record/list` | 我的通关记录 |
-| GET | `/api/record/rank` | 排行榜（每关最快成绩） |
+| 方法 | 路径                    | 说明                                                        |
+| ---- | ----------------------- | ----------------------------------------------------------- |
+| POST | `/api/auth/guest-login` | 游客静默登录（`guest_uuid` 换 JWT）                         |
+| POST | `/api/auth/line`        | LINE LIFF 登录（id_token 换 JWT，需配置 `LINE_CHANNEL_ID`） |
+| POST | `/api/record/start`     | 开局：生成会话（Redis 存 start_time/level_id，TTL 1h）      |
+| POST | `/api/record/submit`    | 结算：签名校验 + 会话/时序/限频校验 + 落库                  |
+| GET  | `/api/record/list`      | 我的通关记录                                                |
+| GET  | `/api/record/rank`      | 排行榜（每关最快成绩）                                      |
 
 **防刷链路**：前端对 `level_id + clear_time + timestamp + SALT` 做 SHA-256 签名；后端依次校验时间戳窗口（60s）、会话存在与关卡匹配、`clear_time` 不超理论耗时且不低于最短通关时间（默认 3s）、每分钟结算 ≤3 次，违规记录到 `hd_cheat_logs` 表。
 

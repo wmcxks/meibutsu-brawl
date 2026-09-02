@@ -10,7 +10,7 @@ A multi-layer card matching (消消乐) H5 game: stacked card boards + bottom-sl
 
 ![Run demo](docs/demo.gif)
 
-> GitHub READMEs do not render `<video>` tags: the animated GIF above previews the first 18 seconds; the full recording is [docs/demo.mp4](docs/demo.mp4).
+> the full recording is [docs/demo.mp4](docs/demo.mp4).
 
 ## Table of Contents
 
@@ -28,12 +28,12 @@ A multi-layer card matching (消消乐) H5 game: stacked card boards + bottom-sl
 
 ## Tech Stack
 
-| Layer | Technology |
-|---|---|
-| Frontend | Vite 8 · TypeScript · Phaser 4 (scenes / rendering / Tweens) · Alpine.js (UI overlay) · Tailwind CSS 4 · Web Crypto (signing) |
-| Frontend SDK | Adapter pattern: `SDKManager` + `WebAdapter` (guest silent login) / `LineAdapter` (LINE LIFF) |
-| Backend | FastAPI · SQLAlchemy 2.x (async / asyncmy) · MySQL · redis-py (Upstash TLS) · PyJWT |
-| Anti-Cheat | SHA-256 signature + timestamp anti-replay on the client; server-side session (Redis), timing & rate checks, cheat-log persistence |
+| Layer        | Technology                                                                                                                        |
+| ------------ | --------------------------------------------------------------------------------------------------------------------------------- |
+| Frontend     | Vite 8 · TypeScript · Phaser 4 (scenes / rendering / Tweens) · Alpine.js (UI overlay) · Tailwind CSS 4 · Web Crypto (signing)     |
+| Frontend SDK | Adapter pattern: `SDKManager` + `WebAdapter` (guest silent login) / `LineAdapter` (LINE LIFF)                                     |
+| Backend      | FastAPI · SQLAlchemy 2.x (async / asyncmy) · MySQL · redis-py (Upstash TLS) · PyJWT                                               |
+| Anti-Cheat   | SHA-256 signature + timestamp anti-replay on the client; server-side session (Redis), timing & rate checks, cheat-log persistence |
 
 ## Project Structure
 
@@ -99,6 +99,7 @@ cp .env.example .env
 Verify: `curl http://127.0.0.1:8089/health` → `{"status":"ok"}`.
 
 **Dependencies**:
+
 - **MySQL** — tables are auto-created with the `hd_` prefix (see `MYSQL_DATABASE` in `.env`)
 - **Redis** — Upstash supported (host containing `.upstash.io` automatically uses TLS), or local `localhost:6379`; the server still boots without it (anti-cheat degrades with a warning)
 
@@ -132,14 +133,14 @@ Phone and computer on the same Wi-Fi: open `http://<computer-IP>:5173` shown in 
 
 ## API Overview
 
-| Method | Path | Description |
-|---|---|---|
-| POST | `/api/auth/guest-login` | Guest silent login (`guest_uuid` → JWT) |
-| POST | `/api/auth/line` | LINE LIFF login (id_token → JWT; requires `LINE_CHANNEL_ID`) |
-| POST | `/api/record/start` | Start a round: create a session (start_time / level_id in Redis, TTL 1h) |
-| POST | `/api/record/submit` | Settle: signature + session / timing / rate-limit checks, then persist |
-| GET | `/api/record/list` | My clear records |
-| GET | `/api/record/rank` | Leaderboard (best time per level) |
+| Method | Path                    | Description                                                              |
+| ------ | ----------------------- | ------------------------------------------------------------------------ |
+| POST   | `/api/auth/guest-login` | Guest silent login (`guest_uuid` → JWT)                                  |
+| POST   | `/api/auth/line`        | LINE LIFF login (id_token → JWT; requires `LINE_CHANNEL_ID`)             |
+| POST   | `/api/record/start`     | Start a round: create a session (start_time / level_id in Redis, TTL 1h) |
+| POST   | `/api/record/submit`    | Settle: signature + session / timing / rate-limit checks, then persist   |
+| GET    | `/api/record/list`      | My clear records                                                         |
+| GET    | `/api/record/rank`      | Leaderboard (best time per level)                                        |
 
 ## Anti-Cheat Pipeline
 
@@ -160,22 +161,22 @@ Splash screen (CSS 3D loader, removed once assets are ready) → straight into t
 
 ### Frontend (`front/.env`)
 
-| Variable | Description | Default |
-|---|---|---|
-| `VITE_API_BASE_URL` | Backend URL; when unset it is derived from the page origin (`http://<current-host>:8089`) | auto |
-| `VITE_TARGET_PLATFORM` | Target platform: `web` (guest login) / `line` (LINE LIFF) | `web` |
-| `VITE_LIFF_ID` | LINE LIFF App ID (line platform only) | empty |
+| Variable               | Description                                                                               | Default |
+| ---------------------- | ----------------------------------------------------------------------------------------- | ------- |
+| `VITE_API_BASE_URL`    | Backend URL; when unset it is derived from the page origin (`http://<current-host>:8089`) | auto    |
+| `VITE_TARGET_PLATFORM` | Target platform: `web` (guest login) / `line` (LINE LIFF)                                 | `web`   |
+| `VITE_LIFF_ID`         | LINE LIFF App ID (line platform only)                                                     | empty   |
 
 ### Backend (`server/.env`)
 
-| Variable | Description |
-|---|---|
-| `MYSQL_HOST / PORT / USER / PASSWORD / DATABASE` | MySQL connection |
-| `REDIS_URL` | Optional full Redis URL (e.g. `rediss://…`) |
-| `REDIS_HOST / PORT / USERNAME / PASSWORD / DB` | Or segmented Redis config; `.upstash.io` hosts auto-enable TLS |
-| `REDIS_SSL` | Force TLS for other cloud Redis providers |
-| `JWT_SECRET / JWT_ALGORITHM / JWT_EXPIRE_HOURS` | JWT settings |
-| `ANTI_CHEAT_SALT` | Signing salt — must match the frontend `SIGN_SALT` in `src/api/request.ts` |
-| `ANTI_CHEAT_SKEW_SECONDS / MIN_CLEAR_TIME_SECONDS / CLEAR_TIME_TOLERANCE_SECONDS / SUBMIT_RATE_LIMIT_PER_MINUTE / SESSION_TTL_SECONDS` | Anti-cheat tuning |
-| `LINE_CHANNEL_ID` | LINE LIFF channel ID (validates id_token `aud`) |
-| `SERVER_HOST / SERVER_PORT` | `python main.py` bind settings (default `0.0.0.0:8089`) |
+| Variable                                                                                                                               | Description                                                                |
+| -------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| `MYSQL_HOST / PORT / USER / PASSWORD / DATABASE`                                                                                       | MySQL connection                                                           |
+| `REDIS_URL`                                                                                                                            | Optional full Redis URL (e.g. `rediss://…`)                                |
+| `REDIS_HOST / PORT / USERNAME / PASSWORD / DB`                                                                                         | Or segmented Redis config; `.upstash.io` hosts auto-enable TLS             |
+| `REDIS_SSL`                                                                                                                            | Force TLS for other cloud Redis providers                                  |
+| `JWT_SECRET / JWT_ALGORITHM / JWT_EXPIRE_HOURS`                                                                                        | JWT settings                                                               |
+| `ANTI_CHEAT_SALT`                                                                                                                      | Signing salt — must match the frontend `SIGN_SALT` in `src/api/request.ts` |
+| `ANTI_CHEAT_SKEW_SECONDS / MIN_CLEAR_TIME_SECONDS / CLEAR_TIME_TOLERANCE_SECONDS / SUBMIT_RATE_LIMIT_PER_MINUTE / SESSION_TTL_SECONDS` | Anti-cheat tuning                                                          |
+| `LINE_CHANNEL_ID`                                                                                                                      | LINE LIFF channel ID (validates id_token `aud`)                            |
+| `SERVER_HOST / SERVER_PORT`                                                                                                            | `python main.py` bind settings (default `0.0.0.0:8089`)                    |
