@@ -64,6 +64,10 @@ class Settings(BaseSettings):
     REWARD_DAILY_CAP_PER_PLACEMENT: int = 10  # 同一渠道（placement）每日发放上限（按 UTC 日）
     REWARD_NONCE_TTL_SECONDS: int = 604800  # 幂等 nonce 去重保留时长（7 天，覆盖活动/补发窗口）
 
+    # ── 管理后台 ──
+    # 运营后台鉴权令牌（X-Admin-Token 请求头）；留空 = 后台整体 403 关闭
+    ADMIN_TOKEN: str = ""
+
     # ── 阿里云 OSS ──
     OSS_ACCESS_KEY_ID: str = ""
     OSS_ACCESS_KEY_SECRET: str = ""

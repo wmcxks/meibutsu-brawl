@@ -4,11 +4,13 @@
   1. nonce 幂等（Redis SETNX，7 天内同一 nonce 只生效一次）
   2. 渠道每日上限（Redis INCR，按 placement × 用户 × UTC 日）
   3. 道具键/数量白名单（服务端硬编码，客户端不可传任意值）
-Redis 不可用时 fail-closed（503），宁可拒发不可漏防。
+运营补偿（placement=op:compensation，管理端调用）跳过渠道上限但仍要求
+nonce 幂等；Redis 不可用时 fail-closed（503），宁可拒发不可漏防。
 """
 
 import logging
 from datetime import datetime, timezone
+from uuid import uuid4
 
 from fastapi import HTTPException
 from redis.exceptions import RedisError
@@ -89,18 +91,34 @@ async def _incr_daily_rewards(db: AsyncSession, user_id: int) -> None:
     await db.commit()
 
 
-async def grant_prop(db: AsyncSession, user_id: int, placement: str, prop_key: str, amount: int, nonce: str) -> dict:
-    """发放道具奖励（C1 唯一入口的执行体）"""
+async def grant_prop(
+    db: AsyncSession,
+    user_id: int,
+    placement: str,
+    prop_key: str,
+    amount: int,
+    nonce: str | None = None,
+    *,
+    op_bypass: bool = False,
+) -> dict:
+    """发放道具奖励（C1 唯一入口的执行体）
+
+    - op_bypass：管理端运营补偿专用（跳过渠道每日上限，仅限 op:compensation）
+    - nonce 缺省时自动生成（仍走 Redis 幂等占位）
+    """
     if placement not in VALID_PLACEMENTS:
         raise HTTPException(status_code=400, detail="未知的奖励渠道")
     if prop_key not in VALID_PROP_KEYS:
         raise HTTPException(status_code=400, detail="未知的道具类型")
+    if op_bypass and placement != "op:compensation":
+        raise HTTPException(status_code=400, detail="仅运营补偿渠道可跳过上限")
 
     # 1. 幂等 nonce（先占位，Redis 不可用直接 503，不落库）
-    await _check_nonce(nonce)
+    await _check_nonce(nonce or uuid4().hex)
 
-    # 2. 渠道每日上限
-    await _check_daily_cap(user_id, placement)
+    # 2. 渠道每日上限（运营补偿跳过）
+    if not op_bypass:
+        await _check_daily_cap(user_id, placement)
 
     # 3. 余额累加 + 当日奖励计数
     balance = await _upsert_prop(db, user_id, prop_key, amount)
