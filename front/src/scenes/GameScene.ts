@@ -6,7 +6,8 @@ import { EventBus, GameEvents } from "../core/EventBus";
 import { LEVELS } from "../core/levels";
 import { getCurrentTheme } from "../core/themes";
 import { startGameBgm } from "../core/BgmManager";
-import { startGameSession, track } from "../api/request";
+import { startGameSession, track, fetchLevels } from "../api/request";
+import type { RemoteLevel } from "../types/api";
 import { BlockTransition } from "../core/BlockTransition";
 
 /** Card drawing constants (mirror client/scenes/game/renders/cards.js). */
@@ -85,6 +86,8 @@ export default class GameScene extends Phaser.Scene {
   private revived = false;
   /** Index of the level currently loaded (0-based). */
   private currentLevel = 0;
+  /** 远端关卡配置（D1）：拉取成功后优先于本地静态 LEVELS；失败回退本地。 */
+  private remoteLevels: RemoteLevel[] | null = null;
   /** Fixed card size (face width/height) in design pixels. */
   private cardSize = 0;
   /** 3D side thickness below the card face. */
@@ -151,6 +154,10 @@ export default class GameScene extends Phaser.Scene {
     const runToken = ++this.loadSeq;
     this.currentSessionId = null;
 
+    // 远端关卡配置（仅首次拉取；失败回退本地静态配置，不影响开局）
+    await this.ensureRemoteLevels();
+    if (runToken !== this.loadSeq) return;
+
     if (this.loadingText) this.loadingText.destroy();
     this.loadingText = this.add
       .text(this.scale.width / 2, this.scale.height / 2, "ステージ生成中...", {
@@ -185,7 +192,7 @@ export default class GameScene extends Phaser.Scene {
     EventBus.emit(
       GameEvents.LEVEL_STARTED,
       this.currentLevel + 1,
-      LEVELS[this.currentLevel].title ?? "",
+      this.levelConfigAt(this.currentLevel).title ?? "",
     );
     track("level_start", { level: this.currentLevel + 1 });
   }
@@ -487,7 +494,7 @@ export default class GameScene extends Phaser.Scene {
     this.revived = false;
     this.engine.reset();
     this.props.reset();
-    this.currentLevel = (this.currentLevel + 1) % LEVELS.length; // 最后一关通关后回到第一关
+    this.currentLevel = (this.currentLevel + 1) % this.levelCount; // 最后一关通关后回到第一关
     EventBus.emit(GameEvents.PROPS_CHANGED, this.props.getCounts());
 
     this.buildLevelAsync();
@@ -773,10 +780,39 @@ export default class GameScene extends Phaser.Scene {
     }
   }
 
+  /** 关卡总数（远端优先，回退本地静态配置）。 */
+  private get levelCount(): number {
+    return Math.max(1, this.remoteLevels?.length ?? LEVELS.length);
+  }
+
+  /** 当前关卡配置：远端布局可用时用之，否则本地静态（D1）。 */
+  private levelConfigAt(index: number): LevelConfig {
+    const remote = this.remoteLevels?.[index];
+    if (remote && remote.regions?.length) {
+      return {
+        title: remote.title,
+        iconTypes: remote.icon_types,
+        regions: remote.regions,
+      };
+    }
+    return LEVELS[index % LEVELS.length];
+  }
+
+  /** 首次进入时拉取远端关卡（3s 快速失败，失败不阻塞游戏）。 */
+  private async ensureRemoteLevels(): Promise<void> {
+    if (this.remoteLevels) return;
+    try {
+      const rows = await fetchLevels();
+      if (rows && rows.length > 0) this.remoteLevels = rows;
+    } catch (err) {
+      console.warn("[levels] 远端关卡不可用，使用本地配置:", err);
+    }
+  }
+
   /** Current level definition (design-space sizes applied on load). */
   private buildLevelConfig(): LevelConfig {
     return {
-      ...LEVELS[this.currentLevel],
+      ...this.levelConfigAt(this.currentLevel),
       width: this.scale.width,
       height: this.scale.height,
     };
@@ -788,7 +824,7 @@ export default class GameScene extends Phaser.Scene {
    */
   private buildDeck(totalCards: number): string[] {
     const iconTypes = Math.min(
-      LEVELS[this.currentLevel].iconTypes,
+      this.levelConfigAt(this.currentLevel).iconTypes,
       this.theme.iconCount,
     );
     const pool = Array.from({ length: this.theme.iconCount }, (_, i) => i + 1);

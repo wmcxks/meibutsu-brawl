@@ -56,6 +56,15 @@ export interface MissionItem {
   reward_amount: number
 }
 
+/** One row of GET /api/levels -> items（远端关卡，D1）。 */
+export interface RemoteLevel {
+  level_id: number
+  title: string
+  icon_types: number
+  regions: import('./game').RegionConfig[]
+  version: number
+}
+
 /** Unified backend response envelope: { code, message, data }. */
 export interface ApiResponse<T> {
   code: number

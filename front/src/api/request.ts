@@ -26,7 +26,7 @@ const BASE_URL: string =
   import.meta.env.VITE_API_BASE_URL ??
   `${location.protocol}//${location.hostname}:8089`
 
-import type { ApiResponse, MissionItem, PlayerSummary, RankResponse } from '../types/api'
+import type { ApiResponse, MissionItem, PlayerSummary, RankResponse, RemoteLevel } from '../types/api'
 
 /** startGameSession hard timeout (fast fail, no retry). */
 const START_TIMEOUT_MS = 3000
@@ -316,6 +316,24 @@ export async function fetchMissions(scope: 'daily' | 'weekly' | 'achievement' = 
 /** POST /api/missions/claim：领取任务奖励。 */
 export async function claimMission(missionKey: string, period: string): Promise<void> {
   await request('/api/missions/claim', { method: 'POST', data: { mission_key: missionKey, period } })
+}
+
+/**
+ * GET /api/levels：远端关卡配置（布局/标题/图标种类）。
+ * 3s 快速失败：关卡配置拿不到时回退到本地静态 LEVELS（不发版前置条件）。
+ */
+export async function fetchLevels(): Promise<RemoteLevel[]> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), 3000)
+  try {
+    const data = await request<{ items: RemoteLevel[] }>('/api/levels', { signal: controller.signal })
+    return data?.items ?? []
+  } catch (err) {
+    console.warn('[levels] 远端关卡拉取失败（回退本地配置）:', err)
+    return []
+  } finally {
+    clearTimeout(timer)
+  }
 }
 
 /** GET /api/configs/public：客户端可见远端配置（公告等，无需登录）。 */
