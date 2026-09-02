@@ -4,10 +4,11 @@ import hashlib
 import time
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.middleware.auth_middleware import get_current_user_id
+from app.middleware.auth_middleware import decode_token, get_current_user_id
 from app.schemas.record import RecordStartRequest, RecordSubmit
 from app.services import anti_cheat_service, config_service, player_service, record_service, stats_service
 from app.utils.response import success, error
@@ -18,6 +19,19 @@ router = APIRouter(prefix="/api/record", tags=["通关记录"])
 settings = get_settings()
 SALT = settings.ANTI_CHEAT_SALT
 SKEW_SECONDS = settings.ANTI_CHEAT_SKEW_SECONDS
+
+_security = HTTPBearer(auto_error=False)
+
+
+async def _optional_user_id(credentials: HTTPAuthorizationCredentials | None = Depends(_security)) -> int | None:
+    """可选鉴权：带 token 解析 user_id（无效/缺失返回 None，不阻断公开接口）"""
+    if credentials is None:
+        return None
+    try:
+        payload = decode_token(credentials.credentials)
+        return payload.get("user_id")
+    except Exception:
+        return None
 
 
 def _fmt_clear_time(value: float) -> str:
@@ -162,12 +176,14 @@ async def get_records(
 @router.get("/rank")
 async def get_rank(
     level_id: int = Query(default=1, description="关卡ID"),
+    region: str = Query(default="", description="区域榜（hd_users.region_code，如 jp-13；空 = 全国榜）"),
     limit: int = Query(default=50, le=100, description="返回数量"),
+    user_id: int | None = Depends(_optional_user_id),
     db: AsyncSession = Depends(get_db),
 ):
-    """获取指定关卡的通关排行榜（无需登录）"""
+    """排行榜（E1）：全国 / 区域 两档，可选返回我的名次（带 token 时）"""
     try:
-        rank = await record_service.get_rank(level_id, limit, db)
+        rank = await record_service.get_rank(db, level_id, limit, region=region, self_user_id=user_id)
         return success(data=rank)
     except Exception as e:
         return error(message=str(e))
