@@ -155,3 +155,37 @@
 - **M3（长期）**：D 内容生成器 + E3 社交 + C3 订单 + F2 看板
 
 > 核心原则：**钱和道具在服务端，奖励入口只有一个，流水只增不改，数值全部远端下发。**
+
+---
+
+# 进度快照（2026-09 · 下次续接从这里开始）
+
+## 已完成
+
+- **M1 全部**：A1-A5（用户画像/每日汇总/钱包流水/道具余额）+ B1-B2（win/fail/quit 统一结算与时长收敛）+ C1（/api/rewards/grant 幂等发放）+ F1（批量埋点 + 前端打点）；含迁移 001
+- **M2 全部**：A6 配置中心 + B3 每日限玩（远端配置）+ A8（改名/区域/注销 + 游客→LINE 并入）+ E1-E2（区域排行榜 + Redis 缓存 + my_rank）+ G1 管理后台（用户/封禁/补偿/配置）+ I1 隐私模板；含迁移 002/003
+- **M3 部分**：
+  - D1 关卡远端化（hd_levels + GET /api/levels + 客户端动态加载/本地回退；种子迁移 005 由 levels.ts 生成）
+  - C3 订单层（hd_orders + 商品目录 + mark-paid 发货走钱包账本；单笔 pending 防刷 + 客户端商店页）
+  - C4 钱包账本服务（credit/debit，event_id 幂等）
+  - F2 后台指标概览（/api/admin/stats/overview 近 N 天序列）
+  - G2 公告下发（announcement.text → /api/configs/public → 客户端 📣）
+  - D4 成就 UI（任务面板 毎日/今週/実績 Tab）
+
+## 待办（下次续接，按优先级）
+
+| # | 内容 | 备注 |
+|---|------|------|
+| 1 | E3 社交：先做**邀请码互关 + 好友榜**（无 LINE 审核成本）；LINE 好友列表 API 需商务审核，列为远期 | 涉及 hd_relations + 分享入口 |
+| 2 | F3 错误上报 + 监控告警入口（前端错误捕获 → /api/events 特型或独立接口；服务端慢查询/错误率日志告警） | 上线前必做 |
+| 3 | C3 真实支付回调验签（LINE Pay/商店 → mark-paid 同一发货路径） | 需渠道商务资质 |
+| 4 | C5 客户端商店化：付费主题/卡背（现有 themes 架构扩展 + 商城商品表） | 依赖 C3 渠道或先出 gem 兑换 |
+| 5 | H1 alembic 迁移体系（当前为 sql/migrations 手工 SQL） | 加表频繁后建议切换 |
+| 6 | H3 资源全量 CDN + 版本哈希 + 强更开关 | 上线部署配套 |
+
+## 部署备忘
+
+- 已有库按序执行：`server/sql/migrations/001~005_*.sql`
+- `server/.env` 必配：`ADMIN_TOKEN`；奖励/看板环境变量见 `.env.example`
+- 本地相对远端领先 13 个 commit，恢复开发后先 `git push`
+- 前端自检：`npm run build`；后端自检：`compileall` + 导入 main
