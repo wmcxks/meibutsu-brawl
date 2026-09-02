@@ -25,10 +25,11 @@ logger = logging.getLogger(__name__)
 CONFIG_DEFAULTS: dict[str, Any] = {
     "play.daily_max_minutes": 0,  # 每日游戏时长上限（分钟，0 = 不限）
     "play.daily_max_games": 0,    # 每日对局上限（0 = 不限）
+    "announcement.text": "",      # 公告文案（空 = 不展示；G2 运营下发）
 }
 
 # 可下发给客户端的配置白名单（不进白名单的配置客户端永远看不到）
-PUBLIC_CONFIG_KEYS: set[str] = set()
+PUBLIC_CONFIG_KEYS: set[str] = {"announcement.text"}
 
 # 读缓存：{key: (value, expire_ts)}，TTL 30s
 _cache: dict[str, tuple[Any, float]] = {}
@@ -87,6 +88,11 @@ async def set_config(db: AsyncSession, key: str, value: Any, remark: str = "") -
     _invalidate(key)
     logger.info(f"[config] set {key} = {value!r}")
     return {key: value}
+
+
+async def get_public(db: AsyncSession) -> dict:
+    """客户端可见配置（仅白名单键；未写库用默认值）"""
+    return {key: await get(db, key) for key in sorted(PUBLIC_CONFIG_KEYS)}
 
 
 async def list_all(db: AsyncSession) -> list[dict]:

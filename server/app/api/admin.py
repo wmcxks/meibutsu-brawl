@@ -132,3 +132,81 @@ async def set_config(
     """写入/热更新远端配置（如 play.daily_max_minutes=30 立即生效）"""
     data = await config_service.set_config(db, cfg_key, req.value, remark=req.remark)
     return success(data=data)
+
+
+@router.get("/stats/overview")
+async def stats_overview(
+    _: None = Depends(require_admin),
+    days: int = Query(default=7, ge=1, le=30, description="近 N 天序列长度"),
+    db: AsyncSession = Depends(get_db),
+):
+    """运营指标概览（F2）：总量 + 近 N 天序列（活跃/新增/对局/时长/通关）
+
+    口径说明：
+      - 活跃 = 当天有任意对局/奖励结算的用户（hd_player_daily 有行）
+      - 新增 = 当天注册的用户数（按数据库本地日，粗口径）
+    """
+    from datetime import date, datetime, timedelta, timezone
+    from sqlalchemy import func as sa_func
+    from app.models.player_daily import PlayerDaily
+    from app.models.record import Record
+    from app.models.user import User
+
+    today = datetime.now(timezone.utc).date()
+    start = today - timedelta(days=days - 1)
+
+    users_total = (await db.execute(select(sa_func.count(User.id)))).scalar_one()
+    records_total = (await db.execute(select(sa_func.count(Record.id)))).scalar_one()
+
+    # 近 N 天序列（按活跃日分组聚合）
+    daily_rows = (
+        await db.execute(
+            select(
+                PlayerDaily.stat_date,
+                sa_func.count(sa_func.distinct(PlayerDaily.user_id)).label("active"),
+                sa_func.coalesce(sa_func.sum(PlayerDaily.games), 0).label("games"),
+                sa_func.coalesce(sa_func.sum(PlayerDaily.wins), 0).label("wins"),
+                sa_func.coalesce(sa_func.sum(PlayerDaily.play_seconds), 0.0).label("seconds"),
+            )
+            .where(PlayerDaily.stat_date >= start)
+            .group_by(PlayerDaily.stat_date)
+            .order_by(PlayerDaily.stat_date.asc())
+        )
+    ).all()
+
+    # 近 N 天新增（按 created_at 的本地日期粗口径）
+    new_rows = (
+        await db.execute(
+            select(
+                sa_func.date(User.created_at).label("d"),
+                sa_func.count(User.id).label("n"),
+            )
+            .where(User.created_at >= datetime.combine(start, datetime.min.time()))
+            .group_by(sa_func.date(User.created_at))
+        )
+    ).all()
+    new_by_day = {row.d: row.n for row in new_rows}
+
+    series = []
+    for offset in range(days):
+        d = start + timedelta(days=offset)
+        row = next((r for r in daily_rows if r.stat_date == d), None)
+        series.append(
+            {
+                "date": d.isoformat(),
+                "active": int(row.active) if row else 0,
+                "new": int(new_by_day.get(d, 0)),
+                "games": int(row.games) if row else 0,
+                "wins": int(row.wins) if row else 0,
+                "play_seconds": round(float(row.seconds), 1) if row else 0.0,
+            }
+        )
+
+    return success(
+        data={
+            "users_total": int(users_total),
+            "records_total": int(records_total),
+            "today": series[-1] if series else None,
+            "series": series,
+        }
+    )
