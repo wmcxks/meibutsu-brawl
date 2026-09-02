@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.middleware.auth_middleware import get_current_user_id
 from app.schemas.record import RecordStartRequest, RecordSubmit
-from app.services import anti_cheat_service, player_service, record_service, stats_service
+from app.services import anti_cheat_service, config_service, player_service, record_service, stats_service
 from app.utils.response import success, error
 from config import get_settings
 
@@ -55,12 +55,23 @@ async def start_record(
     """开局：生成结算会话，作为防机刷的时序基准"""
     try:
         await player_service.assert_user_active(db, user_id)
+        # B3：每日时长/局数上限（远端配置，0 = 不限）
+        max_minutes = await config_service.get_int(db, "play.daily_max_minutes")
+        max_games = await config_service.get_int(db, "play.daily_max_games")
+        seconds_used, games_used = await stats_service.today_usage(db, user_id)
+        if max_minutes > 0 and seconds_used >= max_minutes * 60:
+            raise HTTPException(status_code=403, detail="今日游戏时长已达上限，明天再来吧")
+        if max_games > 0 and games_used >= max_games:
+            raise HTTPException(status_code=403, detail="今日对局次数已达上限，明天再来吧")
+
         session_id = await anti_cheat_service.start_session(req.level_id)
         return success(data={"session_id": session_id})
     except PermissionError as e:
         raise HTTPException(status_code=403, detail=str(e))
     except LookupError as e:
         raise HTTPException(status_code=404, detail=str(e))
+    except HTTPException:
+        raise
     except Exception as e:
         return error(message=str(e))
 

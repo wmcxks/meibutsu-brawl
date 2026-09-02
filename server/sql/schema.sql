@@ -124,3 +124,14 @@ CREATE TABLE IF NOT EXISTS hd_events (
     INDEX idx_event (event),
     INDEX idx_created (created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='名物大乱斗-埋点事件表';
+
+-- ============================================================
+-- 8. 远端配置表（A6）
+-- ============================================================
+CREATE TABLE IF NOT EXISTS hd_configs (
+    cfg_key VARCHAR(64) PRIMARY KEY COMMENT '配置键（如 play.daily_max_minutes）',
+    value TEXT NOT NULL COMMENT '值（JSON 编码文本）',
+    remark VARCHAR(128) DEFAULT '' COMMENT '备注',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='名物大乱斗-远端配置表';

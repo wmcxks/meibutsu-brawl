@@ -11,6 +11,16 @@ from app.models.player_daily import PlayerDaily
 logger = logging.getLogger(__name__)
 
 
+async def today_usage(db: AsyncSession, user_id: int) -> tuple[float, int]:
+    """查询今日累计时长（秒）与局数（UTC 日；无记录返回 0,0）"""
+    today = datetime.now(timezone.utc).date()
+    stmt = select(PlayerDaily).where(PlayerDaily.user_id == user_id, PlayerDaily.stat_date == today)
+    row = (await db.execute(stmt)).scalar_one_or_none()
+    if row is None:
+        return 0.0, 0
+    return float(row.play_seconds or 0), int(row.games or 0)
+
+
 async def record_outcome(
     db: AsyncSession,
     user_id: int,
