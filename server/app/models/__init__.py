@@ -7,6 +7,7 @@ from app.models.user_prop import UserProp
 from app.models.game_event import GameEvent
 from app.models.config_entry import ConfigEntry
 from app.models.order import Order
+from app.models.level import Level
 from app.models.mission import MissionTemplate, UserMission
 
-__all__ = ["User", "Record", "CheatLog", "PlayerDaily", "Wallet", "WalletLog", "UserProp", "GameEvent", "ConfigEntry", "MissionTemplate", "UserMission", "Order"]
+__all__ = ["User", "Record", "CheatLog", "PlayerDaily", "Wallet", "WalletLog", "UserProp", "GameEvent", "ConfigEntry", "MissionTemplate", "UserMission", "Order", "Level"]

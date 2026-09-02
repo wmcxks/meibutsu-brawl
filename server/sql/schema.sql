@@ -187,3 +187,19 @@ CREATE TABLE IF NOT EXISTS hd_orders (
     INDEX idx_user_id (user_id),
     INDEX idx_status (status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='名物大乱斗-订单表';
+
+-- ============================================================
+-- 12. 远端关卡表（D1）
+-- ============================================================
+CREATE TABLE IF NOT EXISTS hd_levels (
+    level_id INT PRIMARY KEY COMMENT '关卡ID（1 起）',
+    title VARCHAR(64) DEFAULT '' COMMENT '关卡标题',
+    icon_types INT DEFAULT 12 COMMENT '本关使用的图标种类数',
+    layout TEXT NOT NULL COMMENT '棋盘布局 JSON（RegionConfig[]）',
+    enabled TINYINT(1) DEFAULT 1 COMMENT '是否启用',
+    version INT DEFAULT 1 COMMENT '配置版本（每次更新 +1）',
+    remark VARCHAR(128) DEFAULT '' COMMENT '备注',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='名物大乱斗-远端关卡表';
+

@@ -17,6 +17,7 @@ from app.api.admin import router as admin_router
 from app.api.missions import router as missions_router
 from app.api.shop import router as shop_router
 from app.api.configs import router as configs_router
+from app.api.levels import router as levels_router
 from config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -68,6 +69,7 @@ app.include_router(admin_router)
 app.include_router(missions_router)
 app.include_router(shop_router)
 app.include_router(configs_router)
+app.include_router(levels_router)
 
 
 @app.get("/health")
