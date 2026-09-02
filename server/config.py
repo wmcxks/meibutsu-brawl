@@ -60,6 +60,10 @@ class Settings(BaseSettings):
     MIN_CLEAR_TIME_SECONDS: float = 3.0  # 允许的最短通关时间（秒），低于即视为机刷
     CLEAR_TIME_TOLERANCE_SECONDS: float = 5.0  # clear_time 超出理论时间的容忍误差
 
+    # ── 奖励发放（C1：所有"加道具"类奖励的唯一入口 /api/rewards/grant）──
+    REWARD_DAILY_CAP_PER_PLACEMENT: int = 10  # 同一渠道（placement）每日发放上限（按 UTC 日）
+    REWARD_NONCE_TTL_SECONDS: int = 604800  # 幂等 nonce 去重保留时长（7 天，覆盖活动/补发窗口）
+
     # ── 阿里云 OSS ──
     OSS_ACCESS_KEY_ID: str = ""
     OSS_ACCESS_KEY_SECRET: str = ""

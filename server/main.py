@@ -11,6 +11,7 @@ from app.core.redis import init_redis, close_redis
 from app.api.auth import router as auth_router
 from app.api.record import router as record_router
 from app.api.user import router as user_router
+from app.api.rewards import router as rewards_router
 from config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -56,6 +57,7 @@ app.add_middleware(
 app.include_router(auth_router)
 app.include_router(record_router)
 app.include_router(user_router)
+app.include_router(rewards_router)
 
 
 @app.get("/health")
