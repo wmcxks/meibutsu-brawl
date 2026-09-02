@@ -8,9 +8,9 @@ A multi-layer card matching (消消乐) H5 game: stacked card boards + bottom-sl
 
 ## Run Demo
 
-<video src="docs/demo.mp4" controls muted preload="metadata" width="360"></video>
+![Run demo](docs/demo.gif)
 
-(Screen recording of the actual game)
+> GitHub READMEs do not render `<video>` tags: the animated GIF above previews the first 18 seconds; the full recording is [docs/demo.mp4](docs/demo.mp4).
 
 ## Table of Contents
 

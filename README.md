@@ -8,9 +8,9 @@
 
 ## 运行演示
 
-<video src="docs/demo.mp4" controls muted preload="metadata" width="360"></video>
+![运行演示](docs/demo.gif)
 
-（实际运行录屏，点击播放）
+> GitHub README 不渲染 `<video>` 标签：上面为可自动播放的 GIF 预览（节选前 18 秒），完整录屏见 [docs/demo.mp4](docs/demo.mp4)。
 
 ## 技术栈
 
