@@ -109,7 +109,7 @@ async def compensate(
 
     data = await reward_service.grant_prop(
         db, req.user_id, "op:compensation", req.prop_key, req.amount,
-        nonce=req.nonce or None, op_bypass=True,
+        nonce=req.nonce or None,
     )
     logger.info(f"[admin] compensate user_id={req.user_id} prop={req.prop_key} +{req.amount} remark={req.remark}")
     return success(data=data)

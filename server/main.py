@@ -14,6 +14,7 @@ from app.api.user import router as user_router
 from app.api.rewards import router as rewards_router
 from app.api.events import router as events_router
 from app.api.admin import router as admin_router
+from app.api.missions import router as missions_router
 from config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -62,6 +63,7 @@ app.include_router(user_router)
 app.include_router(rewards_router)
 app.include_router(events_router)
 app.include_router(admin_router)
+app.include_router(missions_router)
 
 
 @app.get("/health")

@@ -31,7 +31,11 @@ CAP_KEY_PREFIX = "reward:cap:"
 # 合法道具键（与 hd_user_props / 前端 PropManager 对齐）
 VALID_PROP_KEYS = {"move_out", "undo", "shuffle", "peek"}
 # 合法渠道（新增渠道在此登记，便于统一归因与风控）
-VALID_PLACEMENTS = {"ad:reward", "share:invite", "op:compensation"}
+VALID_PLACEMENTS = {"ad:reward", "share:invite", "op:compensation", "mission:reward"}
+# 免渠道上限的渠道（运营补偿 / 任务奖励：各自有独立幂等约束，不受每日发放上限约束）
+UNCAP_PLACEMENTS = {"op:compensation", "mission:reward"}
+# 客户端可直接请求的渠道（/api/rewards/grant），其余仅服务端内部调用
+CLIENT_PLACEMENTS = {"ad:reward", "share:invite"}
 
 
 async def _check_nonce(nonce: str) -> None:
@@ -99,25 +103,25 @@ async def grant_prop(
     amount: int,
     nonce: str | None = None,
     *,
-    op_bypass: bool = False,
+    skip_nonce: bool = False,
 ) -> dict:
     """发放道具奖励（C1 唯一入口的执行体）
 
-    - op_bypass：管理端运营补偿专用（跳过渠道每日上限，仅限 op:compensation）
-    - nonce 缺省时自动生成（仍走 Redis 幂等占位）
+    - nonce：缺省自动生成（仍走 Redis 幂等占位）
+    - skip_nonce：调用方已有更强幂等约束（如任务领取表唯一键）时置 True
+    - 渠道上限：op:compensation / mission:reward 等 UNCAP 渠道不受每日上限约束
     """
     if placement not in VALID_PLACEMENTS:
         raise HTTPException(status_code=400, detail="未知的奖励渠道")
     if prop_key not in VALID_PROP_KEYS:
         raise HTTPException(status_code=400, detail="未知的道具类型")
-    if op_bypass and placement != "op:compensation":
-        raise HTTPException(status_code=400, detail="仅运营补偿渠道可跳过上限")
 
     # 1. 幂等 nonce（先占位，Redis 不可用直接 503，不落库）
-    await _check_nonce(nonce or uuid4().hex)
+    if not skip_nonce:
+        await _check_nonce(nonce or uuid4().hex)
 
-    # 2. 渠道每日上限（运营补偿跳过）
-    if not op_bypass:
+    # 2. 渠道每日上限（UNCAP 渠道跳过）
+    if placement not in UNCAP_PLACEMENTS:
         await _check_daily_cap(user_id, placement)
 
     # 3. 余额累加 + 当日奖励计数

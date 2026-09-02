@@ -7,6 +7,7 @@ from app.core.database import get_db
 from app.middleware.auth_middleware import get_current_user_id
 from app.schemas.reward import RewardGrantRequest
 from app.services import player_service, reward_service
+from app.services.reward_service import CLIENT_PLACEMENTS
 from app.utils.response import success
 
 router = APIRouter(prefix="/api/rewards", tags=["奖励发放"])
@@ -27,5 +28,8 @@ async def grant_reward(
     except PermissionError as e:
         raise HTTPException(status_code=403, detail=str(e))
 
+    # 客户端仅允许访问限渠道上限的 placement（op/mission 为服务端内部渠道）
+    if req.placement not in CLIENT_PLACEMENTS:
+        raise HTTPException(status_code=400, detail="未知的奖励渠道")
     data = await reward_service.grant_prop(db, user_id, req.placement, req.prop_key, req.amount, req.nonce)
     return success(data=data)

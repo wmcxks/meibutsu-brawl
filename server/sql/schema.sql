@@ -135,3 +135,33 @@ CREATE TABLE IF NOT EXISTS hd_configs (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='名物大乱斗-远端配置表';
+
+-- ============================================================
+-- 9. 任务模板表（A7）
+-- ============================================================
+CREATE TABLE IF NOT EXISTS hd_mission_templates (
+    mission_key VARCHAR(48) PRIMARY KEY COMMENT '任务键（唯一）',
+    scope VARCHAR(16) NOT NULL DEFAULT 'daily' COMMENT '周期：daily / weekly / achievement',
+    title VARCHAR(64) DEFAULT '' COMMENT '任务标题（客户端展示文案）',
+    target_type VARCHAR(24) NOT NULL COMMENT '进度口径：games / wins / play_minutes / login_days',
+    target_value INT NOT NULL COMMENT '目标值',
+    reward_prop_key VARCHAR(32) NOT NULL COMMENT '奖励道具键',
+    reward_amount INT DEFAULT 1 COMMENT '奖励数量',
+    enabled TINYINT(1) DEFAULT 1 COMMENT '是否启用',
+    sort_order INT DEFAULT 0 COMMENT '排序',
+    remark VARCHAR(128) DEFAULT '' COMMENT '备注',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='名物大乱斗-任务模板表';
+
+-- ============================================================
+-- 10. 用户任务进度/领取表（A7）
+-- ============================================================
+CREATE TABLE IF NOT EXISTS hd_user_missions (
+    user_id BIGINT NOT NULL COMMENT '用户ID',
+    mission_key VARCHAR(48) NOT NULL COMMENT '任务键',
+    period VARCHAR(16) NOT NULL COMMENT '任务周期（UTC；daily=YYYY-MM-DD / weekly=YYYY-Www / achievement=all）',
+    claimed_at DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '领取时间',
+    PRIMARY KEY (user_id, mission_key, period),
+    FOREIGN KEY (user_id) REFERENCES hd_users(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='名物大乱斗-用户任务领取表';
