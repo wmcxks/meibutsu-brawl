@@ -318,6 +318,12 @@ export async function claimMission(missionKey: string, period: string): Promise<
   await request('/api/missions/claim', { method: 'POST', data: { mission_key: missionKey, period } })
 }
 
+/** GET /api/configs/public：客户端可见远端配置（公告等，无需登录）。 */
+export async function fetchPublicConfigs(): Promise<Record<string, unknown>> {
+  const data = await request<Record<string, unknown>>('/api/configs/public')
+  return data ?? {}
+}
+
 /*
  * ============================================================================
  * 埋点上报（F1）—— 轻量批量 + 防阻塞

@@ -17,6 +17,7 @@ import {
   deleteAccount,
   fetchMissions,
   claimMission,
+  fetchPublicConfigs,
 } from './api/request'
 import { SDKManager } from './sdk/SDKManager'
 import type { MissionItem, PlayerSummary, RankItem } from './types/api'
@@ -124,6 +125,9 @@ Alpine.data('gameUI', () => ({
   _toastTimer: 0,
   /** 最近一局的结算上下文（复活弹窗「放弃」时用它按 fail 上报时长） */
   _lastRun: { score: 0, level: 1, sessionId: '' },
+  /** 远端公告文案（空 = 无公告；运营经后台配置下发） */
+  announcementText: '',
+  _announcementShown: false,
   /** 当前所在关卡（LEVEL_STARTED 时更新，供排行榜默认维度使用） */
   currentLevel: 1,
   /** 我的资料 + 累计统计（/api/user/me，启动后拉取一次） */
@@ -181,11 +185,19 @@ Alpine.data('gameUI', () => ({
     EventBus.on('LEVEL_STARTED', (level: number, title: string) => {
       this.currentLevel = level
       if (level === 1) {
-        this.showToast('チュートリアル：光るカードをタップして、同じ絵柄を3つそろえましょう', 2600)
+        if (this.announcementText && !this._announcementShown) {
+          this._announcementShown = true
+          this.showToast(`📣 ${this.announcementText}`, 4200)
+        } else {
+          this.showToast('チュートリアル：光るカードをタップして、同じ絵柄を3つそろえましょう', 2600)
+        }
       } else {
         this.showToast(`第${level}ステージ · ${title || ''}`, 2000)
       }
     })
+
+    // 拉取远端公告（G2：运营后台配置即下发，无需发版）
+    void this.loadAnnouncement()
 
     // 启动后拉取我的资料/统计（登录已在 bootstrap 完成）
     void this.refreshMe()
@@ -275,6 +287,16 @@ Alpine.data('gameUI', () => ({
 
   closeLeaderboard() {
     this.leaderboardVisible = false
+  },
+
+  async loadAnnouncement() {
+    try {
+      const cfg = await fetchPublicConfigs()
+      const text = cfg['announcement.text']
+      this.announcementText = typeof text === 'string' ? text.trim() : ''
+    } catch (err) {
+      console.warn('[config] 获取公告失败:', err)
+    }
   },
 
   /** 拉取我的资料（profileOpen 时补全；统计用于弹窗展示） */
