@@ -96,19 +96,24 @@ Alpine.data('gameUI', () => ({
   toastText: '',
   toastVisible: false,
   _toastTimer: 0,
+  /** 最近一局的结算上下文（复活弹窗「放弃」时用它按 fail 上报时长） */
+  _lastRun: { score: 0, level: 1, sessionId: '' },
 
   init() {
     EventBus.on('GAME_OVER', (elapsed: number, level: number, sessionId: string) => {
       this.score = elapsed
       this.isGameOver = true
-      this.reportScore(level, sessionId)
+      if (elapsed != null && level != null && sessionId) {
+        this.reportScore(level, sessionId, 'fail')
+      }
     })
     EventBus.on('GAME_WIN', (elapsed: number, level: number, sessionId: string) => {
       // 胜利不再弹窗：成绩静默上报，关卡切换由 GameScene 的转场动画完成
       this.score = elapsed
-      this.reportScore(level, sessionId)
+      this.reportScore(level, sessionId, 'win')
     })
-    EventBus.on('REVIVE_OFFERED', () => {
+    EventBus.on('REVIVE_OFFERED', (score: number, level: number, sessionId: string) => {
+      this._lastRun = { score: score ?? 0, level: level ?? 1, sessionId: sessionId ?? '' }
       this.isReviveVisible = true
     })
     EventBus.on('NETWORK_ERROR', () => {
@@ -173,17 +178,17 @@ Alpine.data('gameUI', () => ({
     EventBus.emit('REVIVE_GAME')
   },
 
-  /** 放弃复活：真正进入失败流程。 */
+  /** 放弃复活：真正进入失败流程，按 fail 结算本局时长。 */
   cancelRevive() {
     this.isReviveVisible = false
-    EventBus.emit('GAME_OVER')
+    EventBus.emit('GAME_OVER', this._lastRun.score, this._lastRun.level, this._lastRun.sessionId)
   },
 
-  /** Async-submit the current score; failures are non-blocking. */
-  reportScore(level: number, sessionId: string) {
-    saveScore(this.score, level, sessionId)
+  /** Async-submit the current run; failures are non-blocking. */
+  reportScore(level: number, sessionId: string, outcome: 'win' | 'fail' | 'quit' = 'win') {
+    saveScore(this.score, level, sessionId, outcome)
       .then(() => {
-        console.log('[report] 成绩已上报:', this.score, '关卡:', level)
+        console.log('[report] 成绩已上报:', this.score, '关卡:', level, '结局:', outcome)
       })
       .catch((err: unknown) => {
         console.warn('[report] 成绩上报失败:', err)

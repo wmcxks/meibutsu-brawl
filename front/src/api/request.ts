@@ -229,7 +229,8 @@ export async function startGameSession(levelId = 1): Promise<string> {
 
 /**
  * Save the current run result to the backend.
- * The backend ranks by clear_time (seconds) — score is the run duration.
+ * win 时按 clear_time(秒)入排行榜；win/fail/quit 都会累计服务端每日统计
+ * （对局数/时长），因此失败与中途退出也必须携带开局会话结算。
  * Signature: SHA256(level_id + clear_time + timestamp + SIGN_SALT), timestamp in seconds.
  *
  * Resilience: EXPONENTIAL BACKOFF via fetchWithRetry (4 attempts, 1s base,
@@ -237,8 +238,14 @@ export async function startGameSession(levelId = 1): Promise<string> {
  * @param score Run duration in seconds.
  * @param levelId Level number (1-based).
  * @param sessionId Session id from startGameSession(); empty skips the submit.
+ * @param outcome 本局结局：win / fail / quit（默认 win）
  */
-export async function saveScore(score: number, levelId = 1, sessionId = ''): Promise<void> {
+export async function saveScore(
+  score: number,
+  levelId = 1,
+  sessionId = '',
+  outcome: 'win' | 'fail' | 'quit' = 'win',
+): Promise<void> {
   if (!sessionId) {
     console.warn('[save] 缺少开局会话，跳过上报')
     return
@@ -251,7 +258,7 @@ export async function saveScore(score: number, levelId = 1, sessionId = ''): Pro
 
   await fetchWithRetry('/api/record/submit', {
     method: 'POST',
-    data: { level_id: levelId, clear_time: score, timestamp, sign, session_id: sessionId },
+    data: { level_id: levelId, clear_time: score, outcome, timestamp, sign, session_id: sessionId },
   })
 }
 

@@ -392,7 +392,8 @@ export default class GameScene extends Phaser.Scene {
           if (!this.revived) {
             // First failure: offer the revive dialog instead of game over.
             this.revived = true;
-            EventBus.emit(GameEvents.REVIVE_OFFERED);
+            // 带本局上下文：放弃复活时 UI 层按 fail 结算（B1：失败也累计时长）
+            EventBus.emit(GameEvents.REVIVE_OFFERED, score, levelId, sessionId);
           } else {
             this.sound.play("audio/game/defeat.mp3");
             EventBus.emit(GameEvents.GAME_OVER, score, levelId, sessionId);
