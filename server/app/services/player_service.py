@@ -2,14 +2,16 @@
 
 import logging
 
-from sqlalchemy import select, func as sa_func
+from sqlalchemy import delete, select, func as sa_func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.user import User
 from app.models.record import Record
+from app.models.cheat_log import CheatLog
 from app.models.player_daily import PlayerDaily
-from app.models.wallet import Wallet
+from app.models.wallet import Wallet, WalletLog
 from app.models.user_prop import UserProp
+from app.models.game_event import GameEvent
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +34,50 @@ async def assert_user_active(db: AsyncSession, user_id: int) -> None:
         raise LookupError(f"用户不存在: {user_id}")
     if user.status == 1:
         raise PermissionError("账号已被封禁")
+
+
+def _user_brief(user: User) -> dict:
+    """用户基础资料（PATCH/DELETE 后复用，避免全量聚合）"""
+    return {
+        "id": user.id,
+        "nickname": user.nickname or f"玩家{user.id}",
+        "avatar_url": user.avatar_url or "",
+        "platform": user.platform or "",
+        "country_code": user.country_code or "",
+        "region_code": user.region_code or "",
+        "status": user.status,
+    }
+
+
+async def update_profile(db: AsyncSession, user_id: int, nickname: str | None, region_code: str | None, country_code: str | None) -> dict:
+    """修改昵称 / 区域（A8；昵称去空白，限制长度）"""
+    user = await _load_user(db, user_id)
+    if nickname is not None:
+        nickname = nickname.strip()
+        if not nickname:
+            raise ValueError("昵称不能为空")
+        user.nickname = nickname[:32]
+    if region_code is not None:
+        user.region_code = region_code[:16]
+    if country_code is not None:
+        user.country_code = country_code[:4]
+    await db.commit()
+    await db.refresh(user)
+    return _user_brief(user)
+
+
+async def delete_account(db: AsyncSession, user_id: int) -> None:
+    """账号注销（A8/I1：合规删除本人全部数据，含流水与埋点）"""
+    user = await _load_user(db, user_id)
+
+    # 子表数据全部删除（含外键引用方），最后删用户行
+    for model in (Record, WalletLog, Wallet, UserProp, PlayerDaily, CheatLog, GameEvent):
+        await db.execute(
+            delete(model).where(model.user_id == user_id)
+        )
+    await db.delete(user)
+    await db.commit()
+    logger.info(f"[account] user_id={user_id} 账号已注销删除")
 
 
 async def get_player_summary(db: AsyncSession, user_id: int) -> dict:
