@@ -25,6 +25,15 @@ async def _load_user(db: AsyncSession, user_id: int) -> User:
     return user
 
 
+async def assert_user_active(db: AsyncSession, user_id: int) -> None:
+    """封禁校验：status=1 的用户拒绝进入游戏/领取奖励（403）"""
+    user = await db.get(User, user_id)
+    if user is None:
+        raise LookupError(f"用户不存在: {user_id}")
+    if user.status == 1:
+        raise PermissionError("账号已被封禁")
+
+
 async def get_player_summary(db: AsyncSession, user_id: int) -> dict:
     """聚合返回用户资料 + 累计统计 + 道具/钱包余额
 

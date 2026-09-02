@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.middleware.auth_middleware import get_current_user_id
 from app.schemas.record import RecordStartRequest, RecordSubmit
-from app.services import anti_cheat_service, record_service
+from app.services import anti_cheat_service, player_service, record_service, stats_service
 from app.utils.response import success, error
 from config import get_settings
 
@@ -54,8 +54,13 @@ async def start_record(
 ):
     """开局：生成结算会话，作为防机刷的时序基准"""
     try:
+        await player_service.assert_user_active(db, user_id)
         session_id = await anti_cheat_service.start_session(req.level_id)
         return success(data={"session_id": session_id})
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+    except LookupError as e:
+        raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         return error(message=str(e))
 
@@ -66,7 +71,17 @@ async def submit_record(
     user_id: int = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ):
-    """提交通关记录（签名 + 会话 + 时序 + 限频，防机刷）"""
+    """统一结算（win / fail / quit）
+
+    签名 + 会话 + 时序 + 限频 防机刷；win 落排行榜记录，全部结局都累计
+    每日时长/局数（B1/B2，服务端时间收敛，杜绝前端伪造超报）。
+    """
+    # 0. 封禁校验
+    try:
+        await player_service.assert_user_active(db, user_id)
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+
     # 1. 签名与时间戳防重放
     verify_sign(req)
 
@@ -83,7 +98,8 @@ async def submit_record(
         )
         raise HTTPException(status_code=403, detail="关卡与开局会话不匹配")
 
-    # 4. 时序校验：clear_time 必须在理论时间内且不低于最短通关时间
+    # 4. 时序校验：本局用时不得超过会话真实经过时间 + 容差
+    #    （防超报时长刷 hd_player_daily；win 另需不低于最短通关时间）
     elapsed = time.time() - session["start_time"]
     if req.clear_time > elapsed + settings.CLEAR_TIME_TOLERANCE_SECONDS:
         await anti_cheat_service.log_cheat(
@@ -92,24 +108,31 @@ async def submit_record(
             detail=f"clear_time={req.clear_time:.3f} elapsed={elapsed:.3f}",
         )
         raise HTTPException(status_code=403, detail="成绩时间异常")
-    if req.clear_time < settings.MIN_CLEAR_TIME_SECONDS:
-        await anti_cheat_service.log_cheat(
-            db, user_id, req.session_id, req.level_id,
-            reason="too_fast",
-            detail=f"clear_time={req.clear_time:.3f}",
-        )
-        raise HTTPException(status_code=403, detail="成绩时间异常")
 
-    # 5. 落库（原有逻辑不变）
-    try:
+    # 服务端收敛时长：以会话真实经过时间为上限（fail/quit 允许短报，不放大）
+    duration = min(req.clear_time, elapsed)
+
+    record_id = None
+    if req.outcome == "win":
+        if req.clear_time < settings.MIN_CLEAR_TIME_SECONDS:
+            await anti_cheat_service.log_cheat(
+                db, user_id, req.session_id, req.level_id,
+                reason="too_fast",
+                detail=f"clear_time={req.clear_time:.3f}",
+            )
+            raise HTTPException(status_code=403, detail="成绩时间异常")
+
+        # 5. win：落排行榜记录（原逻辑）
         record = await record_service.submit_record(user_id, req.level_id, req.clear_time, db)
-    except Exception as e:
-        return error(message=str(e))
+        record_id = record.id
 
-    # 6. 结算成功：删除会话，防止重放
+    # 6. 累计每日统计（win/fail/quit 都累计时长与局数）
+    await stats_service.record_outcome(db, user_id, req.level_id, req.outcome, duration)
+
+    # 7. 结算成功：删除会话，防止重放
     await anti_cheat_service.delete_session(req.session_id)
 
-    return success(data={"id": record.id})
+    return success(data={"id": record_id})
 
 
 @router.get("/list")
