@@ -65,6 +65,14 @@ export interface RemoteLevel {
   version: number
 }
 
+/** One shop product row（C3）。 */
+export interface ShopProduct {
+  sku: string
+  name: string
+  currency: string
+  amount: number
+}
+
 /** Unified backend response envelope: { code, message, data }. */
 export interface ApiResponse<T> {
   code: number

@@ -27,12 +27,21 @@ async def create_order(
     user_id: int = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ):
-    """下单（生成 pending 订单；支付渠道接入前不收款）"""
+    """下单（生成 pending 订单；支付渠道接入前由后台确认收款发货）"""
     try:
         await player_service.assert_user_active(db, user_id)
     except PermissionError as e:
         raise HTTPException(status_code=403, detail=str(e))
     return success(data=await order_service.create_order(db, user_id, req.sku))
+
+
+@router.post("/order/cancel")
+async def cancel_order(
+    user_id: int = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """取消我的待支付订单"""
+    return success(data=await order_service.cancel_pending(db, user_id))
 
 
 @router.post("/admin/orders/{order_no}/mark-paid")

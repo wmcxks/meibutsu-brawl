@@ -33,10 +33,22 @@ def get_products() -> list[dict]:
 
 
 async def create_order(db: AsyncSession, user_id: int, sku: str) -> dict:
-    """下单：生成 pending 订单（幂等键 order_no；同一 SKU 可重复购买）"""
+    """下单：生成 pending 订单（幂等键 order_no）
+
+    规则：同一用户同时只允许一笔 pending 订单（防重复下单/刷单），
+    支付完成或取消后方可再下。
+    """
     meta = CATALOG.get(sku)
     if meta is None:
         raise HTTPException(status_code=404, detail="商品不存在")
+
+    pending = (
+        await db.execute(
+            select(Order).where(Order.user_id == user_id, Order.status == "pending")
+        )
+    ).scalar_one_or_none()
+    if pending is not None:
+        raise HTTPException(status_code=409, detail="已有待支付订单，请先完成或取消")
 
     order_no = f"HD{int(time.time())}{uuid4().hex[:12].upper()}"
     order = Order(
@@ -52,6 +64,21 @@ async def create_order(db: AsyncSession, user_id: int, sku: str) -> dict:
     await db.commit()
     logger.info(f"[order] user_id={user_id} create {order_no} sku={sku}")
     return {"order_no": order_no, "sku": sku, "status": order.status}
+
+
+async def cancel_pending(db: AsyncSession, user_id: int) -> dict:
+    """取消当前用户待支付订单（手动取消；后续接渠道后由用户操作页触发）"""
+    pending = (
+        await db.execute(
+            select(Order).where(Order.user_id == user_id, Order.status == "pending")
+        )
+    ).scalar_one_or_none()
+    if pending is None:
+        return {"cancelled": False}
+    pending.status = "cancelled"
+    await db.commit()
+    logger.info(f"[order] user_id={user_id} cancel {pending.order_no}")
+    return {"cancelled": True, "order_no": pending.order_no}
 
 
 async def mark_paid(

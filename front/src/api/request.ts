@@ -26,7 +26,7 @@ const BASE_URL: string =
   import.meta.env.VITE_API_BASE_URL ??
   `${location.protocol}//${location.hostname}:8089`
 
-import type { ApiResponse, MissionItem, PlayerSummary, RankResponse, RemoteLevel } from '../types/api'
+import type { ApiResponse, MissionItem, PlayerSummary, RankResponse, RemoteLevel, ShopProduct } from '../types/api'
 
 /** startGameSession hard timeout (fast fail, no retry). */
 const START_TIMEOUT_MS = 3000
@@ -334,6 +334,22 @@ export async function fetchLevels(): Promise<RemoteLevel[]> {
   } finally {
     clearTimeout(timer)
   }
+}
+
+/** GET /api/shop/products：商品目录。 */
+export async function fetchProducts(): Promise<ShopProduct[]> {
+  const data = await request<{ items: ShopProduct[] }>('/api/shop/products')
+  return data?.items ?? []
+}
+
+/** POST /api/shop/order：下单（同一用户仅一笔 pending 订单）。 */
+export async function createShopOrder(sku: string): Promise<{ order_no: string; status: string }> {
+  return request('/api/shop/order', { method: 'POST', data: { sku } })
+}
+
+/** POST /api/shop/order/cancel：取消我的待支付订单。 */
+export async function cancelShopOrder(): Promise<void> {
+  await request('/api/shop/order/cancel', { method: 'POST' })
 }
 
 /** GET /api/configs/public：客户端可见远端配置（公告等，无需登录）。 */

@@ -65,6 +65,12 @@
             aria-label="ミッション"
           >📋</button>
           <button
+            @click="openShop()"
+            class="flex h-[9cqw] w-[9cqw] cursor-pointer items-center justify-center rounded-full border-none bg-black/40 text-[4.2cqw]"
+            style="line-height:1;"
+            aria-label="ショップ"
+          >🛍️</button>
+          <button
             @click="openProfile()"
             class="flex h-[9cqw] w-[9cqw] cursor-pointer items-center justify-center rounded-full border-none bg-black/40 text-[4.2cqw]"
             style="line-height:1;"
@@ -220,13 +226,31 @@
         </div>
       </div>
 
-      <!-- 每日任务面板 -->
+      <!-- 任务面板（每日 / 每周 / 成就） -->
       <div
         x-show="missionsOpen"
         class="pointer-events-auto absolute inset-0 flex items-center justify-center bg-black/60 font-sans"
       >
-        <div class="flex max-h-[75%] w-[84%] max-w-[460px] flex-col rounded-[14px] bg-white p-5 text-center">
-          <h2 class="m-0 mb-3 text-[20px] font-bold text-[#7a5c1e]">ミッション（毎日）</h2>
+        <div class="flex max-h-[78%] w-[86%] max-w-[460px] flex-col rounded-[14px] bg-white p-5 text-center">
+          <h2 class="m-0 mb-3 text-[20px] font-bold text-[#7a5c1e]">ミッション</h2>
+          <!-- 周期切换 -->
+          <div class="mb-3 flex justify-center gap-2 text-sm font-bold">
+            <button
+              @click="setMissionsScope('daily')"
+              :class="missionsScope === 'daily' ? 'bg-[#e8b33d] text-white' : 'bg-[#eee] text-[#777]'"
+              class="cursor-pointer rounded-full border-none px-4 py-1.5"
+            >毎日</button>
+            <button
+              @click="setMissionsScope('weekly')"
+              :class="missionsScope === 'weekly' ? 'bg-[#e8b33d] text-white' : 'bg-[#eee] text-[#777]'"
+              class="cursor-pointer rounded-full border-none px-4 py-1.5"
+            >今週</button>
+            <button
+              @click="setMissionsScope('achievement')"
+              :class="missionsScope === 'achievement' ? 'bg-[#e8b33d] text-white' : 'bg-[#eee] text-[#777]'"
+              class="cursor-pointer rounded-full border-none px-4 py-1.5"
+            >実績</button>
+          </div>
           <ul class="m-0 mb-4 list-none flex-1 overflow-y-auto p-0">
             <template x-for="m in missions" :key="m.mission_key">
               <li class="mb-2 flex items-center justify-between rounded-[10px] bg-[#faf7f0] px-3 py-2.5">
@@ -249,6 +273,36 @@
           </ul>
           <div x-show="!missionsLoading && missions.length === 0" class="py-2 text-sm text-[#999]">ミッションはありません</div>
           <button @click="missionsOpen = false" class="w-full cursor-pointer rounded-[10px] bg-[#e8b33d] py-3 text-base font-bold text-white">閉じる</button>
+        </div>
+      </div>
+
+      <!-- 商店面板（支付渠道接入前的占位流程） -->
+      <div
+        x-show="shopOpen"
+        class="pointer-events-auto absolute inset-0 flex items-center justify-center bg-black/60 font-sans"
+      >
+        <div class="flex max-h-[75%] w-[84%] max-w-[440px] flex-col rounded-[14px] bg-white p-5 text-center">
+          <h2 class="m-0 mb-3 text-[20px] font-bold text-[#7a5c1e]">ショップ</h2>
+          <div class="mb-2 flex justify-end">
+            <button @click="cancelPendingOrder()" class="cursor-pointer border-none bg-transparent text-[12px] text-[#999] underline">未完了の注文をキャンセル</button>
+          </div>
+          <ul class="m-0 mb-4 list-none flex-1 overflow-y-auto p-0">
+            <template x-for="p in shopProducts" :key="p.sku">
+              <li class="mb-2 flex items-center justify-between rounded-[10px] bg-[#faf7f0] px-3 py-3">
+                <div class="text-left">
+                  <p class="m-0 text-[15px] font-bold text-[#444]" x-text="p.name"></p>
+                  <p class="m-0 mt-0.5 text-[12px] text-[#999]" x-text="'保有通貨：' + currencyName(p.currency)"></p>
+                </div>
+                <button
+                  @click="buyProduct(p)"
+                  :disabled="shopBuying"
+                  class="ml-2 shrink-0 cursor-pointer rounded-full border-none bg-[#e8b33d] px-5 py-2.5 text-[14px] font-bold text-white disabled:opacity-50"
+                >注文</button>
+              </li>
+            </template>
+          </ul>
+          <div x-show="shopProducts.length === 0" class="py-2 text-sm text-[#999]">準備中です</div>
+          <button @click="shopOpen = false" class="w-full cursor-pointer rounded-[10px] bg-[#e8b33d] py-3 text-base font-bold text-white">閉じる</button>
         </div>
       </div>
       </div>

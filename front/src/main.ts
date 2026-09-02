@@ -18,9 +18,12 @@ import {
   fetchMissions,
   claimMission,
   fetchPublicConfigs,
+  fetchProducts,
+  createShopOrder,
+  cancelShopOrder,
 } from './api/request'
 import { SDKManager } from './sdk/SDKManager'
-import type { MissionItem, PlayerSummary, RankItem } from './types/api'
+import type { MissionItem, PlayerSummary, RankItem, ShopProduct } from './types/api'
 
 // 设计稿高度随设备宽高比动态取（1280~1600，见 core/viewport.ts），
 // 全面屏手机画面铺满全屏，不再在道具栏下方留下大片空白。
@@ -147,6 +150,10 @@ Alpine.data('gameUI', () => ({
   missionsOpen: false,
   missions: [] as MissionItem[],
   missionsLoading: false,
+  missionsScope: 'daily' as 'daily' | 'weekly' | 'achievement',
+  shopOpen: false,
+  shopProducts: [] as ShopProduct[],
+  shopBuying: false,
 
   init() {
     EventBus.on('GAME_OVER', (elapsed: number, level: number, sessionId: string) => {
@@ -344,21 +351,66 @@ Alpine.data('gameUI', () => ({
     }
   },
 
-  /** 打开每日任务面板 */
+  /** 打开任务面板（默认每日） */
   async openMissions() {
     this.missionsOpen = true
+    this.missionsScope = 'daily'
+    await this.reloadMissions()
+  },
+
+  /** 切换每日/每周/成就 Tab */
+  async setMissionsScope(scope: 'daily' | 'weekly' | 'achievement') {
+    this.missionsScope = scope
     await this.reloadMissions()
   },
 
   async reloadMissions() {
     this.missionsLoading = true
     try {
-      this.missions = await fetchMissions('daily')
+      this.missions = await fetchMissions(this.missionsScope)
     } catch (err) {
       console.warn('[missions] 获取任务失败:', err)
       this.missions = []
     } finally {
       this.missionsLoading = false
+    }
+  },
+
+  /** 商店：加载商品 */
+  async openShop() {
+    this.shopOpen = true
+    if (this.shopProducts.length === 0) {
+      try {
+        this.shopProducts = await fetchProducts()
+      } catch (err) {
+        console.warn('[shop] 商品目录加载失败:', err)
+        this.shopProducts = []
+      }
+    }
+  },
+
+  /** 下单（人工确认收款前仅占位；后端限制单笔 pending） */
+  async buyProduct(p: ShopProduct) {
+    if (this.shopBuying) return
+    this.shopBuying = true
+    try {
+      await createShopOrder(p.sku)
+      this.showToast('注文を受け付けました（運営確認後にお届け）')
+    } catch (err) {
+      console.warn('[shop] 下单失败:', err)
+      this.showToast('注文できませんでした（未完了の注文があります）')
+    } finally {
+      this.shopBuying = false
+    }
+  },
+
+  /** 取消待支付订单 */
+  async cancelPendingOrder() {
+    try {
+      await cancelShopOrder()
+      this.showToast('注文をキャンセルしました')
+    } catch (err) {
+      console.warn('[shop] 取消失败:', err)
     }
   },
 
@@ -378,6 +430,12 @@ Alpine.data('gameUI', () => ({
   /** 区域名显示（区域榜 Tab） */
   regionName(code: string) {
     return JP_PREFECTURES.find((p) => p.code === code)?.name ?? code
+  },
+
+  /** 货币/奖励文案（商店/任务共用） */
+  currencyName(cur: string) {
+    const map: Record<string, string> = { gem: 'ジェム', coin: 'コイン' }
+    return map[cur] ?? cur
   },
 
   /** 道具奖励文案（任务面板） */
