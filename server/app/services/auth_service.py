@@ -1,5 +1,6 @@
 """登录鉴权业务逻辑"""
 
+import logging
 from datetime import datetime
 from uuid import uuid4
 
@@ -9,9 +10,18 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.user import User
+from app.models.record import Record
+from app.models.cheat_log import CheatLog
+from app.models.player_daily import PlayerDaily
+from app.models.wallet import Wallet, WalletLog
+from app.models.user_prop import UserProp
+from app.models.game_event import GameEvent
+from app.models.mission import UserMission
 from app.middleware.auth_middleware import create_token
 from app.schemas.auth import LoginProfile
 from config import get_settings
+
+logger = logging.getLogger(__name__)
 
 # LINE id_token 校验（PyJWKClient 内部缓存 LINE 公钥，无需每次请求 JWKS）
 LINE_JWKS_URL = "https://api.line.me/oauth2/v2.1/certs"
@@ -115,10 +125,80 @@ async def guest_login(guest_uuid: str, db: AsyncSession, profile: LoginProfile |
     }
 
 
-async def line_login(id_token: str, db: AsyncSession, profile: LoginProfile | None = None) -> dict:
+async def _merge_guest_into_line(db: AsyncSession, line_openid: str, guest_uuid: str) -> int:
+    """游客→LINE 绑定（A8）：把本机游客账号数据并入 LINE 账号后删除游客
+
+    - 幂等：游客不存在 / 同一账号时 no-op
+    - 冲突合并：道具/钱包按余额相加，每日统计按量相加；
+      流水/记录/埋点等无冲突行直接改挂 LINE 用户
+    """
+    stmt = select(User).where(User.openid == line_openid)
+    target = (await db.execute(stmt)).scalar_one_or_none()
+
+    guest_openid = f"guest:{guest_uuid}"
+    if guest_openid == line_openid:
+        return 0
+    guest = (await db.execute(select(User).where(User.openid == guest_openid))).scalar_one_or_none()
+    if guest is None:
+        return 0
+    if target is None:
+        # 目标 LINE 用户异常缺失：以游客数据为新账号（防御性）
+        guest.openid = line_openid
+        guest.platform = "line"
+        await db.commit()
+        return 0
+
+    gid, tid = guest.id, target.id
+    if gid == tid:
+        return 0
+
+    # 1) 余额/日统计冲突行：按 key 求和并删除游客行
+    for model, merge in (
+        (Wallet, {"balance": lambda a, b: a + b}),
+        (UserProp, {"balance": lambda a, b: a + b}),
+        (PlayerDaily, {"games": lambda a, b: a + b,
+                       "wins": lambda a, b: a + b,
+                       "play_seconds": lambda a, b: a + b,
+                       "ads_watched": lambda a, b: a + b,
+                       "rewards": lambda a, b: a + b}),
+    ):
+        for row in (await db.execute(select(model).where(model.user_id == gid))).scalars().all():
+            cols = [c.name for c in model.__table__.primary_key.columns if c.name != "user_id"]
+            keys = {c: getattr(row, c) for c in cols}
+            tgt = (await db.execute(select(model).where(model.user_id == tid, *[getattr(model, k) == v for k, v in keys.items()]))).scalar_one_or_none()
+            if tgt is None:
+                row.user_id = tid
+                db.add(row)
+            else:
+                for col, fn in merge.items():
+                    setattr(tgt, col, fn(getattr(tgt, col) or 0, getattr(row, col) or 0))
+                await db.delete(row)
+        await db.commit()
+
+    # 2) 无冲突子表直接改挂
+    for model in (Record, WalletLog, GameEvent, CheatLog, UserMission):
+        await db.execute(
+            model.__table__.update().where(model.user_id == gid).values(user_id=tid)
+        )
+    await db.commit()
+
+    # 3) 删除游客账号
+    await db.delete(guest)
+    await db.commit()
+    logger.info(f"[bind] 游客 {gid} 数据已并入 LINE 用户 {tid}")
+    return tid
+
+
+async def line_login(
+    id_token: str,
+    db: AsyncSession,
+    profile: LoginProfile | None = None,
+    guest_uuid: str | None = None,
+) -> dict:
     """LINE LIFF 登录：校验 id_token → 按 LINE 用户标识查找/创建用户 → 签发统一 JWT
 
     LINE 用户唯一标识（sub）存储在 openid 字段（line: 前缀命名空间）。
+    携带 guest_uuid 时执行游客→LINE 数据并入（A8，防丢号/跨端升级）。
     """
     # 1. 校验 LINE id_token（验签 + iss/aud/exp），失败抛 400/503
     claims = _verify_line_id_token(id_token)
@@ -126,6 +206,14 @@ async def line_login(id_token: str, db: AsyncSession, profile: LoginProfile | No
     # 2. 按 line:sub 查找或创建用户
     openid = f"line:{claims['sub']}"
     user = await _get_or_create_user(db, openid)
+
+    # 2.1 游客数据并入（本设备之前以游客身份玩过）
+    if guest_uuid:
+        try:
+            await _merge_guest_into_line(db, openid, guest_uuid)
+        except Exception as e:
+            # 并入失败不阻断 LINE 登录（数据可下次登录重试）
+            logger.warning(f"[bind] 游客并入失败（忽略）: {e}")
 
     # 3. profile scope 下回填 LINE 昵称/头像（仅在为空时）
     if claims.get("name") and not user.nickname:

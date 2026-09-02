@@ -20,3 +20,4 @@ class GuestLoginRequest(LoginProfile):
 class LineLoginRequest(LoginProfile):
     """LINE LIFF 登录请求"""
     id_token: str = Field(min_length=1, description="LIFF 登录后获取的 id_token")
+    guest_uuid: str | None = Field(default=None, max_length=64, description="本机游客 UUID（存在时触发游客数据并入 LINE 账号）")

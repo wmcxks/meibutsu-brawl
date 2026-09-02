@@ -33,9 +33,9 @@ async def guest_login(req: GuestLoginRequest, db: AsyncSession = Depends(get_db)
 
 @router.post("/line")
 async def line_login(req: LineLoginRequest, db: AsyncSession = Depends(get_db)):
-    """LINE LIFF 登录（id_token 换统一 JWT）"""
+    """LINE LIFF 登录（id_token 换统一 JWT；带 guest_uuid 时并入游客数据）"""
     try:
-        data = await auth_service.line_login(req.id_token, db, profile=req)
+        data = await auth_service.line_login(req.id_token, db, profile=req, guest_uuid=req.guest_uuid)
         return success(data=data)
     except HTTPException:
         # 凭证无效/服务不可用等语义错误保持原 HTTP 状态码透传
