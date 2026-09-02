@@ -270,6 +270,69 @@ export async function getLeaderboard(levelId = 1, limit = 50): Promise<RankItem[
 
 /*
  * ============================================================================
+ * 埋点上报（F1）—— 轻量批量 + 防阻塞
+ * ============================================================================
+ */
+interface TrackEvent {
+  event: string
+  props?: Record<string, unknown>
+  client_ts?: number
+}
+
+let trackQueue: TrackEvent[] = []
+let trackTimer: number | null = null
+const TRACK_FLUSH_MS = 1500
+const TRACK_BATCH_MAX = 10
+
+/**
+ * 打点（fire-and-forget）：本地攒批，满 10 条或 1.5s 后统一上报，
+ * 页面离开时用 keepalive 兜底。任何失败只告警，绝不影响游戏主流程。
+ * @param event 事件名（小写 snake_case，如 level_win）
+ * @param props 属性（扁平对象，服务端限制单条 JSON ≤1KB）
+ */
+export function track(event: string, props: Record<string, unknown> = {}): void {
+  trackQueue.push({ event, props, client_ts: Math.floor(Date.now() / 1000) })
+  if (trackQueue.length >= TRACK_BATCH_MAX) {
+    void flushTrack(false)
+    return
+  }
+  if (trackTimer === null) {
+    trackTimer = window.setTimeout(() => {
+      trackTimer = null
+      void flushTrack(false)
+    }, TRACK_FLUSH_MS)
+  }
+}
+
+async function flushTrack(keepalive: boolean): Promise<void> {
+  if (trackQueue.length === 0) return
+  const batch = trackQueue.splice(0, 50)
+  try {
+    const token = getToken()
+    await fetch(`${BASE_URL}/api/events`, {
+      method: 'POST',
+      keepalive,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ events: batch }),
+    })
+  } catch (err) {
+    // 已出队的数据丢弃即可，避免无限重试拖累主流程
+    console.warn('[track] 埋点上报失败:', err)
+  }
+}
+
+// 页面隐藏/关闭前兜底冲刷（keepalive 允许在 unload 阶段发请求）
+if (typeof window !== 'undefined') {
+  window.addEventListener('pagehide', () => {
+    if (trackQueue.length > 0) void flushTrack(true)
+  })
+}
+
+/*
+ * ============================================================================
  * Backend CORS configuration guide (server/main.py)
  * ----------------------------------------------------------------------------
  * To allow this H5 (vite dev on http://localhost:5173, or the deployed H5

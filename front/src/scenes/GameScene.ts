@@ -6,7 +6,7 @@ import { EventBus, GameEvents } from "../core/EventBus";
 import { LEVELS } from "../core/levels";
 import { getCurrentTheme } from "../core/themes";
 import { startGameBgm } from "../core/BgmManager";
-import { startGameSession } from "../api/request";
+import { startGameSession, track } from "../api/request";
 import { BlockTransition } from "../core/BlockTransition";
 
 /** Card drawing constants (mirror client/scenes/game/renders/cards.js). */
@@ -187,6 +187,7 @@ export default class GameScene extends Phaser.Scene {
       this.currentLevel + 1,
       LEVELS[this.currentLevel].title ?? "",
     );
+    track("level_start", { level: this.currentLevel + 1 });
   }
 
   /** Bake the two card-frame textures (normal / blocked) once per run. */
@@ -571,6 +572,7 @@ export default class GameScene extends Phaser.Scene {
 
     if (ok) {
       this.props.use(index);
+      track("prop_use", { index });
       EventBus.emit(GameEvents.PROPS_CHANGED, this.props.getCounts());
     }
   };

@@ -8,7 +8,7 @@ import { EventBus } from './core/EventBus'
 import { initUiScaler } from './core/uiScaler'
 import { setBgmMuted } from './core/BgmManager'
 import { GAME_WIDTH, computeDesignHeight } from './core/viewport'
-import { saveScore, getLeaderboard } from './api/request'
+import { saveScore, getLeaderboard, track } from './api/request'
 import { SDKManager } from './sdk/SDKManager'
 import type { RankItem } from './types/api'
 
@@ -71,6 +71,9 @@ async function bootstrap(): Promise<void> {
   const uiContainer = document.getElementById('ui-container')
   const appHost = document.getElementById('app')
   if (uiContainer && appHost) initUiScaler(uiContainer, appHost, DESIGN_HEIGHT)
+
+  // 埋点：页面加载完成（此时已完成 SDK 登录，可归因到用户）
+  track('page_load', { platform: SDKManager.adapter.platform })
 }
 
 void bootstrap()
@@ -104,12 +107,14 @@ Alpine.data('gameUI', () => ({
       this.score = elapsed
       this.isGameOver = true
       if (elapsed != null && level != null && sessionId) {
+        track('level_fail', { level, duration: elapsed })
         this.reportScore(level, sessionId, 'fail')
       }
     })
     EventBus.on('GAME_WIN', (elapsed: number, level: number, sessionId: string) => {
       // 胜利不再弹窗：成绩静默上报，关卡切换由 GameScene 的转场动画完成
       this.score = elapsed
+      track('level_win', { level, duration: elapsed })
       this.reportScore(level, sessionId, 'win')
     })
     EventBus.on('REVIVE_OFFERED', (score: number, level: number, sessionId: string) => {
