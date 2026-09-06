@@ -171,21 +171,29 @@
   - F2 后台指标概览（/api/admin/stats/overview 近 N 天序列）
   - G2 公告下发（announcement.text → /api/configs/public → 客户端 📣）
   - D4 成就 UI（任务面板 毎日/今週/実績 Tab）
+- **E3 社交**（迁移 006）：邀请码互关（hd_users.invite_code 懒生成 + hd_relations 双向行）+ 好友榜（/api/friends/rank Redis 缓存）+ 分享（?invite= 自动绑定 / LINE shareTargetPicker / Web Share）+ 好友管理与解除 + 注销/并户清理关系
+- **F3 错误上报与监控**（迁移 007）：前端全局捕获（window.onerror/unhandledrejection/pagehide keepalive）→ POST /api/errors（限流 60/h）+ 管理端错误列表/确认；服务端 Monitor 中间件（慢请求阈值 + 分钟错误率告警 + 可选 Webhook）+ /api/admin/monitor 概览
+- **C3 真实支付回调骨架**：payments.py 渠道适配器（LinePay 凭据校验占位 + 待接 HMAC 注释）+ POST /api/payments/{provider}/callback（验签→resolve_order→mark_paid 同发货路径；未配置返回 501）
+- **C5 装扮商店**（迁移 008）：7 套卡面目录（前端已有图片包启用）+ hd_cosmetics/hd_user_cosmetics + gem 账本购买/装备（买即装、同 kind 互斥）；前端商店「テーマ」Tab + 装备后本地缓存生效；主题按装备态预加载（不再纯随机）
+- **H1 alembic 迁移体系**：server/alembic + 基线迁移（0001_baseline 等价 schema.sql，老库幂等）；新结构变更一律 alembic，不再新增 sql/migrations 手工文件
+- **H3 CDN/版本化**：vite base 支持 VITE_CDN_BASE（哈希产物 + immutable 缓存）+ upload_web.py（OSS 版本目录 + latest.json）+ 强更（app.min_client_ver/app.latest_url → 客户端版本门槛遮罩）
+- 远端库已升级至 17 张 hd_* 表（006/007/008 已执行）
 
 ## 待办（下次续接，按优先级）
 
 | # | 内容 | 备注 |
 |---|------|------|
-| 1 | E3 社交：先做**邀请码互关 + 好友榜**（无 LINE 审核成本）；LINE 好友列表 API 需商务审核，列为远期 | 涉及 hd_relations + 分享入口 |
-| 2 | F3 错误上报 + 监控告警入口（前端错误捕获 → /api/events 特型或独立接口；服务端慢查询/错误率日志告警） | 上线前必做 |
-| 3 | C3 真实支付回调验签（LINE Pay/商店 → mark-paid 同一发货路径） | 需渠道商务资质 |
-| 4 | C5 客户端商店化：付费主题/卡背（现有 themes 架构扩展 + 商城商品表） | 依赖 C3 渠道或先出 gem 兑换 |
-| 5 | H1 alembic 迁移体系（当前为 sql/migrations 手工 SQL） | 加表频繁后建议切换 |
-| 6 | H3 资源全量 CDN + 版本哈希 + 强更开关 | 上线部署配套 |
+| 1 | E3 LINE 好友列表 API（需商务审核） | 目前走邀请码互关路径 |
+| 2 | F3 接入 sentry 或正式告警通道 + 前端 error 面板 | 当前为自建日志 + 可选 Webhook |
+| 3 | C3 支付回调真实验签启用（LINE Pay HMAC 注释处） | 需渠道商务资质 + 下单预留 reservationId |
+| 4 | C5 更多装扮种类（卡背/头像框）与主题预览图 | 目录结构已支持 kind 扩展 |
+| 5 | H3 一键发布流水线（build→upload_web→改 latest_url→CI） | 当前为手工命令 |
+| 6 | 压测与容量基准（start/submit/rank 热点） | H4 |
 
 ## 部署备忘
 
-- 已有库按序执行：`server/sql/migrations/001~005_*.sql`
-- `server/.env` 必配：`ADMIN_TOKEN`；奖励/看板环境变量见 `.env.example`
-- 本地相对远端领先 13 个 commit，恢复开发后先 `git push`
-- 前端自检：`npm run build`；后端自检：`compileall` + 导入 main
+- 老库按序执行 `server/sql/migrations/001~008_*.sql`（脚本：`python scripts/migrate_remote.py`）
+- 新结构变更一律走 alembic（`cd server && python -m alembic upgrade head`；详见 server/alembic/README.md）
+- `server/.env` 必配：`ADMIN_TOKEN`；告警/支付/版本变量见 `.env.example`
+- 前端自检：`npm run build`；后端自检：`compileall` + 导入 main（openapi 41 个路径）
+- 版本发布：`front` 构建注入 `VITE_APP_VERSION` / `VITE_CDN_BASE` → `scripts/oss_upload/upload_web.py --version vX.Y.Z`
