@@ -66,7 +66,12 @@ if [[ "$SKIP_UPLOAD" == "1" ]]; then
   echo "[2/3] 跳过 OSS 上传（--skip-upload）"
 else
   echo "[2/3] 上传到 OSS h5/v${VER}/"
-  (cd "$OSS_DIR" && uv run python upload_web.py --version "v${VER}")
+  if command -v uv >/dev/null 2>&1; then
+    (cd "$OSS_DIR" && uv run python upload_web.py --version "v${VER}")
+  else
+    echo "[i] 未检测到 uv，改用 python3 + pip 安装上传依赖"
+    (cd "$OSS_DIR" && python3 -m pip install -q oss2 python-dotenv && python3 upload_web.py --version "v${VER}")
+  fi
 fi
 
 INDEX_URL="${CDN_BASE}index.html"
