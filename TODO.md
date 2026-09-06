@@ -184,11 +184,17 @@
 | # | 内容 | 备注 |
 |---|------|------|
 | 1 | E3 LINE 好友列表 API（需商务审核） | 目前走邀请码互关路径 |
-| 2 | F3 接入 sentry 或正式告警通道 | 自建日志 + Webhook + scripts/ops_check.py 已可接 cron |
+| 2 | F3 Sentry 启用（代码已接：SENTRY_DSN + ENV_NAME，依赖 `pip install -e 'server[monitoring]'`） | 自建日志/Webhook/ops_check 兜底 |
 | 3 | C3 真实验签随凭据启用（HMAC 已实现 + 5 个单元测试；接口层 501 待渠道配置） | 需渠道商务资质 |
-| 4 | C5 卡背/头像框（需先有客户端资源与渲染）与主题预览图 | 预览图已完成；kind 结构已支持扩展 |
-| 5 | H3 接入 CI（GitHub Actions）跑 deploy_web.sh | 本地一键命令已就绪 |
-| 6 | H4 压测执行并记录容量基线 | 脚本 scripts/bench_load.py 已就绪（连联调环境跑） |
+| 4 | C5 卡背/头像框（需先有客户端资源与渲染） | 主题预览图已完成；kind 结构已支持 |
+| 5 | H3 CI 已接（.github/workflows/ci.yml：push 自动 test+build；手动 dispatch 走 deploy） | Secrets 清单见 scripts/README.md |
+| 6 | H4 压测执行并记录容量基线 | bench_load.py 就绪；⚠️ 仅限联调/staging 环境 |
+
+## 本轮收尾补充（2026-09-06 第三波）
+
+- H2/CI：GitHub Actions（server 编译+单测 / client tsc+build；手动触发一键发布含 latest_url）
+- F3：Sentry 可选接入（config + env + 启动 glue，DSN 为空即关闭）
+- 文档：scripts/README.md（deploy/ops_check/bench_load 用法、CI Secrets 清单、压测隔离警告）
 
 ## 本轮收尾补充（2026-09-06 第二波）
 
