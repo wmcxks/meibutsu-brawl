@@ -184,11 +184,21 @@
 | # | 内容 | 备注 |
 |---|------|------|
 | 1 | E3 LINE 好友列表 API（需商务审核） | 目前走邀请码互关路径 |
-| 2 | F3 接入 sentry 或正式告警通道 + 前端 error 面板 | 当前为自建日志 + 可选 Webhook |
-| 3 | C3 支付回调真实验签启用（LINE Pay HMAC 注释处） | 需渠道商务资质 + 下单预留 reservationId |
-| 4 | C5 更多装扮种类（卡背/头像框）与主题预览图 | 目录结构已支持 kind 扩展 |
-| 5 | H3 一键发布流水线（build→upload_web→改 latest_url→CI） | 当前为手工命令 |
-| 6 | 压测与容量基准（start/submit/rank 热点） | H4 |
+| 2 | F3 接入 sentry 或正式告警通道 | 自建日志 + Webhook + scripts/ops_check.py 已可接 cron |
+| 3 | C3 真实验签随凭据启用（HMAC 已实现 + 5 个单元测试；接口层 501 待渠道配置） | 需渠道商务资质 |
+| 4 | C5 卡背/头像框（需先有客户端资源与渲染）与主题预览图 | 预览图已完成；kind 结构已支持扩展 |
+| 5 | H3 接入 CI（GitHub Actions）跑 deploy_web.sh | 本地一键命令已就绪 |
+| 6 | H4 压测执行并记录容量基线 | 脚本 scripts/bench_load.py 已就绪（连联调环境跑） |
+
+## 本轮收尾补充（2026-09-06 第二波）
+
+- C3：LINE Pay HMAC 验签按官方算法落地（Base64(HMAC-SHA256(channelSecret, 签名原文))；
+  X-LINE-Authorization 内嵌原文解析），tests/test_payments.py 5 例全过
+- C5：商店主题 Tab 加卡面预览图（取各主题前 3 图标）
+- H3 补漏：index.html 公共资源改 %BASE_URL%（CDN 构建生效）、UI 图片统一走 assetUrl()；
+  新增 scripts/deploy_web.sh 一键发布（build→OSS 上传→可选自动配 app.latest_url）
+- F3 运维：scripts/ops_check.py 健康巡检（health/monitor/错误数/待支付订单/活跃），cron 友好退出码
+- H4 基准：scripts/bench_load.py（start/submit/rank 三热点，RPS+P50/P95/P99）
 
 ## 部署备忘
 
