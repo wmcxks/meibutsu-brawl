@@ -32,6 +32,11 @@ settings = get_settings()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期：启动时初始化数据库与 Redis 连接"""
+    # F3 可选错误监控（Sentry；配置 SENTRY_DSN 后生效）
+    from app.services.sentry_glue import init_sentry
+
+    init_sentry()
+
     # 启动 — 连接失败仅告警，不阻断服务
     try:
         await init_db()

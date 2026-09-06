@@ -87,6 +87,13 @@ class Settings(BaseSettings):
     # 兜底最低客户端版本（如 "0.1.0"；空 = 不限制），正式值建议写 hd_configs 下发
     MIN_CLIENT_VER: str = ""
 
+    # ── F3 错误监控（可选） ──
+    # 设置 SENTRY_DSN 后自动初始化 sentry-sdk（依赖见 pyproject 的
+    # optional-dependencies.monitoring，未安装且配置了 DSN 时启动仅告警）
+    SENTRY_DSN: str = ""
+    # 运行环境标识（dev / staging / prod），随上报上下文标记
+    ENV_NAME: str = "dev"
+
     # ── 阿里云 OSS ──
     OSS_ACCESS_KEY_ID: str = ""
     OSS_ACCESS_KEY_SECRET: str = ""
