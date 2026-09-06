@@ -92,7 +92,7 @@
               :class="propCounts[i] <= 0 ? 'opacity-40 grayscale' : ''"
               class="relative h-[16cqw] w-[16cqw] cursor-pointer overflow-hidden rounded-[10px] border-none p-0"
             >
-              <img :src="assetUrl('/images/game/props/' + icon + '.png')" class="h-full w-full object-cover" alt="">
+              <img :src="assetUrl('/images/game/props/' + icon + '.webp')" class="h-full w-full object-cover" alt="">
               <span
                 x-show="propCounts[i] > 0"
                 class="absolute -top-[1.2cqw] -right-[1.2cqw] flex h-[5.7cqw] min-w-[5.7cqw] items-center justify-center rounded-full bg-[#ff5252] px-[1cqw] text-[3.6cqw] font-bold text-white"
@@ -399,9 +399,9 @@
                   <div class="min-w-0 flex-1 text-left">
                     <!-- 主题卡面预览（取该主题前 3 个图标） -->
                     <div class="mb-1 flex gap-1">
-                      <img :src="assetUrl('/images/game/cards/themes/' + c.item_key + '/1.png')" class="h-[5cqw] w-[5cqw] rounded-[1cqw] object-cover" alt="" loading="lazy">
-                      <img :src="assetUrl('/images/game/cards/themes/' + c.item_key + '/2.png')" class="h-[5cqw] w-[5cqw] rounded-[1cqw] object-cover" alt="" loading="lazy">
-                      <img :src="assetUrl('/images/game/cards/themes/' + c.item_key + '/3.png')" class="h-[5cqw] w-[5cqw] rounded-[1cqw] object-cover" alt="" loading="lazy">
+                      <img :src="assetUrl('/images/game/cards/themes/' + c.item_key + '/1.webp')" class="h-[5cqw] w-[5cqw] rounded-[1cqw] object-cover" alt="" loading="lazy">
+                      <img :src="assetUrl('/images/game/cards/themes/' + c.item_key + '/2.webp')" class="h-[5cqw] w-[5cqw] rounded-[1cqw] object-cover" alt="" loading="lazy">
+                      <img :src="assetUrl('/images/game/cards/themes/' + c.item_key + '/3.webp')" class="h-[5cqw] w-[5cqw] rounded-[1cqw] object-cover" alt="" loading="lazy">
                     </div>
                     <p class="m-0 text-[14px] font-bold text-[#444]" x-text="c.name"></p>
                     <p class="m-0 mt-0.5 text-[12px] text-[#999]">

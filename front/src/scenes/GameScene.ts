@@ -4,10 +4,11 @@ import type { CardNode, LevelConfig } from "../types/game";
 import { PropManager } from "../core/PropManager";
 import { EventBus, GameEvents } from "../core/EventBus";
 import { LEVELS } from "../core/levels";
-import { getCurrentTheme } from "../core/themes";
+import { getCurrentTheme, themeIconPath, getIconsLoadedThrough, markIconsLoadedThrough } from "../core/themes";
 import { startGameBgm } from "../core/BgmManager";
 import { startGameSession, track, fetchLevels } from "../api/request";
 import type { RemoteLevel } from "../types/api";
+import { takeFirstStageData } from "../core/bootPrefetch";
 import { BlockTransition } from "../core/BlockTransition";
 
 /** Card drawing constants (mirror client/scenes/game/renders/cards.js). */
@@ -80,6 +81,14 @@ export default class GameScene extends Phaser.Scene {
   private currentSessionId: string | null = null;
   /** "ステージ生成中..." overlay shown while the session request is in flight. */
   private loadingText: Phaser.GameObjects.Text | null = null;
+  /** 本次场景生命周期是否已尝试消费启动期预取（重启场景后置回 false）。 */
+  private prefetchTried = false;
+  /** 懒加载图标 Promise（同批请求复用；完成后清空）。 */
+  private iconLoadPromise: Promise<void> | null = null;
+  /** 懒加载目标图标数（防重复发起更小范围请求）。 */
+  private iconLoadTarget = 0;
+  /** 懒加载音效 in-flight 集合（首用加载后自动播放）。 */
+  private readonly audioLoading = new Set<string>();
   /** Guards stale session awaits after the scene is shut down / restarted. */
   private loadSeq = 0;
   /** Whether the revive opportunity has already been used this run. */
@@ -132,6 +141,7 @@ export default class GameScene extends Phaser.Scene {
     this.revived = false;
     this.peekMode = false;
     this.peekViews = [];
+    this.prefetchTried = false;
     this.engine.reset();
     this.props.reset();
 
@@ -145,20 +155,8 @@ export default class GameScene extends Phaser.Scene {
     EventBus.emit(GameEvents.PROPS_CHANGED, this.props.getCounts());
   }
 
-  /**
-   * Fetch the backend session first, THEN render the level:
-   * cards must not exist until the server-side anti-cheat baseline is ready.
-   */
-  private async buildLevelAsync(): Promise<void> {
-    // Invalidate any previous in-flight request (e.g. from a fast restart).
-    const runToken = ++this.loadSeq;
-    this.currentSessionId = null;
-
-    // 远端关卡配置（仅首次拉取；失败回退本地静态配置，不影响开局）
-    await this.ensureRemoteLevels();
-    if (runToken !== this.loadSeq) return;
-
-    if (this.loadingText) this.loadingText.destroy();
+  /** 遮罩提示（非首次进入/预取缺失时，会话请求期间短暂展示）。 */
+  private showStageLoading(): void {    if (this.loadingText) return;
     this.loadingText = this.add
       .text(this.scale.width / 2, this.scale.height / 2, "ステージ生成中...", {
         fontSize: "28px",
@@ -168,33 +166,128 @@ export default class GameScene extends Phaser.Scene {
       .setDepth(5000)
       .setBackgroundColor("rgba(0,0,0,0.5)")
       .setPadding(16, 10);
+  }
 
-    try {
-      const sessionId = await startGameSession(this.currentLevel + 1);
-      if (runToken !== this.loadSeq) return; // scene was restarted/stopped meanwhile
-      this.currentSessionId = sessionId;
-    } catch (err) {
-      if (runToken !== this.loadSeq) return;
-      // Fast-fail: ask the player to retry manually through the Alpine dialog.
-      console.warn("[session] 开局会话失败，等待玩家手动重连:", err);
-      this.loadingText.destroy();
-      this.loadingText = null;
-      EventBus.emit(GameEvents.NETWORK_ERROR);
-      return;
-    }
-
+  private hideStageLoading(): void {
+    if (!this.loadingText) return;
     this.loadingText.destroy();
     this.loadingText = null;
+  }
+
+  /**
+   * 确保该关所需的卡面图标已加载（1..iconTypes）。
+   * 首关图标已在 BootScene 预载，通常直接返回；后续关卡在转场遮挡期间
+   * 懒加载缺口，加载完成前不会露出新关卡（BlockTransition 支持 await）。
+   */
+  private ensureIconsFor(iconTypes: number): Promise<void> {
+    const need = Math.min(Math.max(1, iconTypes), this.theme.iconCount);
+    if (need <= getIconsLoadedThrough()) return Promise.resolve();
+    if (this.iconLoadPromise && need <= this.iconLoadTarget) return this.iconLoadPromise;
+
+    const from = getIconsLoadedThrough() + 1;
+    const keys: string[] = [];
+    for (let i = from; i <= need; i++) {
+      const key = themeIconPath(this.theme.name, i);
+      if (!this.textures.exists(key)) keys.push(key);
+    }
+    markIconsLoadedThrough(need); // 先占位，防并发重复入队
+    this.iconLoadTarget = need;
+
+    this.iconLoadPromise = new Promise<void>((resolve) => {
+      if (keys.length === 0) {
+        this.iconLoadPromise = null;
+        this.iconLoadTarget = 0;
+        resolve();
+        return;
+      }
+      const settle = () => {
+        this.iconLoadPromise = null;
+        this.iconLoadTarget = 0;
+        this.events.off(Phaser.Scenes.Events.SHUTDOWN, onShutdown);
+        resolve();
+      };
+      const onShutdown = () => settle();
+      this.events.once(Phaser.Scenes.Events.SHUTDOWN, onShutdown);
+      this.load.once(Phaser.Loader.Events.COMPLETE, settle);
+      keys.forEach((key) => this.load.image(key, key));
+      this.load.start();
+    });
+    return this.iconLoadPromise;
+  }
+
+  /** 懒加载音效并在就绪后立即播放（胜/负等低频音效首用时才下载）。 */
+  private ensureAudioAndPlay(key: string): void {
+    if (this.cache.audio.exists(key)) {
+      this.sound.play(key);
+      return;
+    }
+    if (this.audioLoading.has(key)) return;
+    this.audioLoading.add(key);
+    this.load.audio(key, key);
+    this.load.once(Phaser.Loader.Events.COMPLETE, () => {
+      this.audioLoading.delete(key);
+      if (!this.scene.isActive()) return;
+      if (this.cache.audio.exists(key)) this.sound.play(key);
+    });
+    this.load.start();
+  }
+
+  /**
+   * Fetch the backend session first, THEN render the level:
+   * cards must not exist until the server-side anti-cheat baseline is ready.
+   * 首开第 1 关：会话与远端关卡已在首屏启动时预取（bootPrefetch），
+   * 直接消费并跳过「ステージ生成中...」；预取缺失时仍走现场请求兜底。
+   */
+  private async buildLevelAsync(): Promise<void> {
+    // Invalidate any previous in-flight request (e.g. from a fast restart).
+    const runToken = ++this.loadSeq;
+    this.currentSessionId = null;
+
+    // 首次进入消费启动期预取（本场景生命周期内只试一次；restart 后 cache 已空）
+    let bootSessionId: string | null = null;
+    if (!this.prefetchTried) {
+      this.prefetchTried = true;
+      const prefetched = takeFirstStageData();
+      if (prefetched?.levels) this.remoteLevels = prefetched.levels;
+      bootSessionId = prefetched?.sessionId ?? null;
+    }
+
+    // 远端关卡配置（仅首次拉取；失败回退本地静态配置，不影响开局）
+    await this.ensureRemoteLevels();
+    if (runToken !== this.loadSeq) return;
+
+    let sessionId: string | null = bootSessionId;
+    if (sessionId == null) {
+      this.showStageLoading();
+      try {
+        sessionId = await startGameSession(this.currentLevel + 1);
+        if (runToken !== this.loadSeq) return; // scene was restarted/stopped meanwhile
+        this.currentSessionId = sessionId;
+      } catch (err) {
+        if (runToken !== this.loadSeq) return;
+        // Fast-fail: ask the player to retry manually through the Alpine dialog.
+        console.warn("[session] 开局会话失败，等待玩家手动重连:", err);
+        this.hideStageLoading();
+        EventBus.emit(GameEvents.NETWORK_ERROR);
+        return;
+      }
+      this.hideStageLoading();
+    } else {
+      this.currentSessionId = sessionId;
+    }
 
     // The score timer starts when gameplay actually begins (not during loading).
     this.startAt = this.time.now;
+    // 该关所需图标若尚未加载（理论上首关已预载），补齐后再落盘，避免缺贴图
+    await this.ensureIconsFor(this.levelConfigAt(this.currentLevel).iconTypes);
+    if (runToken !== this.loadSeq) return;
     this.buildLevel();
     EventBus.emit(
       GameEvents.LEVEL_STARTED,
       this.currentLevel + 1,
       this.levelConfigAt(this.currentLevel).title ?? "",
     );
-    track("level_start", { level: this.currentLevel + 1 });
+    track("level_start", { level: this.currentLevel + 1, prefetched: Boolean(bootSessionId) });
   }
 
   /** Bake the two card-frame textures (normal / blocked) once per run. */
@@ -243,7 +336,7 @@ export default class GameScene extends Phaser.Scene {
     const texH = this.cardSize + this.cardDepth;
 
     for (const card of cards) {
-      card.texture = `images/game/cards/themes/${this.theme.name}/${card.type}.png`;
+      card.texture = themeIconPath(this.theme.name, Number(card.type));
 
       // Container is anchored at the face center: hit-testing adds
       // displayOrigin (size*0.5), so x/y must be the visual center.
@@ -307,7 +400,7 @@ export default class GameScene extends Phaser.Scene {
       .image(
         this.tray.bgX + this.tray.bgW / 2,
         this.tray.bgY + this.tray.bgH / 2,
-        "images/game/cards/slots.png",
+        "images/game/cards/slots.webp",
       )
       .setDisplaySize(this.tray.bgW, this.tray.bgH)
       .setDepth(TRAY_BG_DEPTH)
@@ -403,14 +496,14 @@ export default class GameScene extends Phaser.Scene {
             // 带本局上下文：放弃复活时 UI 层按 fail 结算（B1：失败也累计时长）
             EventBus.emit(GameEvents.REVIVE_OFFERED, score, levelId, sessionId);
           } else {
-            this.sound.play("audio/game/defeat.mp3");
+            this.ensureAudioAndPlay("audio/game/defeat.mp3");
             EventBus.emit(GameEvents.GAME_OVER, score, levelId, sessionId);
           }
           return;
         }
         if (this.engine.getAliveCards().length === 0) {
           this.pauseGame();
-          this.sound.play("audio/game/success.mp3");
+          this.ensureAudioAndPlay("audio/game/success.mp3");
           // 胜利：不再弹窗，用转场动画遮挡并自动进入下一关
           this.startWinTransition(score, levelId, sessionId);
           return;
@@ -457,16 +550,20 @@ export default class GameScene extends Phaser.Scene {
     // 3. 取当前主题的一张卡牌图标作为方块贴图（随关卡轮换，视觉不单调）
     const theme = this.theme;
     const iconNo = ((levelId - 1) % theme.iconCount) + 1;
-    const textureKey = `images/game/cards/themes/${theme.name}/${iconNo}.png`;
 
-    // 4. 播放转场：遮挡瞬间原地换关，退场完成自动销毁释放资源
+    // 4. 播放转场：遮挡瞬间等新关图标就绪后原地换关，退场露出新关卡
     const transition = new BlockTransition(this, {
       width: this.scale.width,
       height: this.scale.height,
     });
     transition.play(
-      textureKey,
-      () => this.swapToNextLevel(),
+      themeIconPath(theme.name, iconNo),
+      async () => {
+        // 预取下一关所需图标（期间方块全屏遮挡，tween 暂停等待）
+        const nextLevel = (this.currentLevel + 1) % this.levelCount;
+        await this.ensureIconsFor(this.levelConfigAt(nextLevel).iconTypes);
+        this.swapToNextLevel();
+      },
       () => {
         transition.destroy();
         EventBus.emit(GameEvents.TRANSITION_END);
@@ -675,7 +772,7 @@ export default class GameScene extends Phaser.Scene {
       if (!view || !card.type) continue;
       view.icon
         .setTexture(
-          `images/game/cards/themes/${this.theme.name}/${card.type}.png`,
+          themeIconPath(this.theme.name, Number(card.type)),
         )
         .setDisplaySize(iconSize, iconSize);
     }
@@ -819,15 +916,16 @@ export default class GameScene extends Phaser.Scene {
   }
 
   /**
-   * Build a deck of triples from `iconTypes` random theme icons, then shuffle
-   * (Fisher-Yates). The type value doubles as the icon file number: <theme>/<type>.png
+   * Build a deck of triples from `iconTypes` theme icons, then shuffle
+   * (Fisher-Yates). Type value = icon file number <theme>/<type>.webp.
+   * 牌池只取 1..iconTypes（与懒加载集合一致：加载 N 个图标即可支撑本关）。
    */
   private buildDeck(totalCards: number): string[] {
     const iconTypes = Math.min(
       this.levelConfigAt(this.currentLevel).iconTypes,
       this.theme.iconCount,
     );
-    const pool = Array.from({ length: this.theme.iconCount }, (_, i) => i + 1);
+    const pool = Array.from({ length: iconTypes }, (_, i) => i + 1);
     for (let i = pool.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [pool[i], pool[j]] = [pool[j], pool[i]];

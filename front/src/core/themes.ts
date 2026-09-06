@@ -31,6 +31,27 @@ const DEFAULT_THEME = CARD_THEMES[0]
 /** localStorage 键：装备中的主题名（main.ts 启动时与服务端装备态同步）。 */
 const THEME_STORAGE_KEY = 'hd_theme'
 
+/** 图标资源格式：public 下已统一转 WebP（见 scripts/convert_webp.py） */
+export const THEME_ICON_EXT = 'webp'
+
+/** 已预加载到的图标序号（本局资源管理器内，供按需懒加载计算缺口）。 */
+let iconsLoadedThrough = 0
+
+/** 构造主题图标路径（key 与 URL 相同，Boot/Game 场景共用）。 */
+export function themeIconPath(themeName: string, iconNo: number): string {
+  return `images/game/cards/themes/${themeName}/${iconNo}.${THEME_ICON_EXT}`
+}
+
+/** 当前已加载到第几个图标（0 = 未加载）。 */
+export function getIconsLoadedThrough(): number {
+  return iconsLoadedThrough
+}
+
+/** 记录已加载到第几个图标（懒加载开始前先占位，防重复入队）。 */
+export function markIconsLoadedThrough(iconNo: number): void {
+  if (iconNo > iconsLoadedThrough) iconsLoadedThrough = iconNo
+}
+
 let currentTheme: CardTheme = DEFAULT_THEME
 
 function findTheme(name: string): CardTheme | null {

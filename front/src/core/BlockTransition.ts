@@ -75,12 +75,14 @@ export class BlockTransition {
   /**
    * 播放关卡转场：方块群从左侧连续跑到右侧。
    * @param blockTextureKey 游戏方块贴图在 TextureManager 中的 key
-   * @param onCovered   屏幕被完全遮挡的瞬间触发（仅一次）；底层应在此销毁旧关卡、渲染新关卡
+   * @param onCovered   屏幕被完全遮挡的瞬间触发（仅一次）；底层应在此销毁旧关卡、渲染新关卡。
+   *                    返回 Promise 时，方块群会停在完全遮挡位等待其完成再继续退场
+   *                    （用于换关前懒加载新关卡素材，杜绝露出缺贴图的瞬间）。
    * @param onComplete  方块群跑出屏幕、新关卡可见后触发；内部已自动清理全部资源
    */
   play(
     blockTextureKey: string,
-    onCovered: () => void,
+    onCovered: () => void | Promise<void>,
     onComplete: () => void,
   ): void {
     if (this.destroyed) {
@@ -139,7 +141,19 @@ export class BlockTransition {
           (tween.targets[0] as Phaser.GameObjects.Container).x >= coverStartX
         ) {
           this.coveredFired = true;
-          onCovered();
+          const result = onCovered();
+          // onCovered 异步（懒加载素材等）：暂停方块群停在完全遮挡位，
+          // 完成后继续退场；场景已销毁则不恢复（tween 随场景销毁）。
+          if (result && typeof (result as Promise<void>).then === "function") {
+            this.sweepTween?.pause();
+            Promise.resolve(result)
+              .then(() => {
+                if (!this.destroyed) this.sweepTween?.resume();
+              })
+              .catch(() => {
+                if (!this.destroyed) this.sweepTween?.resume();
+              });
+          }
         }
       },
       onComplete: () => {

@@ -2,13 +2,13 @@ import Phaser from 'phaser'
 import Alpine from 'alpinejs'
 import './style.css'
 import BootScene from './scenes/BootScene'
-import MenuScene from './scenes/MenuScene'
 import GameScene from './scenes/GameScene'
 import { EventBus } from './core/EventBus'
 import { initUiScaler } from './core/uiScaler'
 import { setBgmMuted } from './core/BgmManager'
 import { setLocalEquippedTheme } from './core/themes'
 import { initErrorReporting } from './core/clientErrors'
+import { prefetchFirstStage } from './core/bootPrefetch'
 import { GAME_WIDTH, computeDesignHeight } from './core/viewport'
 import {
   saveScore,
@@ -56,7 +56,7 @@ const config: Phaser.Types.Core.GameConfig = {
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH,
   },
-  scene: [BootScene, MenuScene, GameScene],
+  scene: [BootScene, GameScene],
 }
 
 /**
@@ -84,6 +84,9 @@ async function bootstrap(): Promise<void> {
 
   // C5：启动前与服务端同步装备主题（本地缓存驱动 BootScene 卡面预加载）
   await syncEquippedTheme()
+
+  // 首关免等待：预取远端关卡 + 第 1 关开局会话（失败静默，进游戏时兜底）
+  await prefetchFirstStage()
 
   gameInstance = new Phaser.Game(config)
 

@@ -1,11 +1,15 @@
 import Phaser from 'phaser'
-import { pickTheme } from '../core/themes'
+import { pickTheme, themeIconPath, markIconsLoadedThrough } from '../core/themes'
+import { LEVELS } from '../core/levels'
+import { getPrefetchedFirstIconTypes } from '../core/bootPrefetch'
 
 /**
  * BootScene
- * First scene of the game: preloads the assets actually used this run
- * (the equipped/fallback card theme, game/menu art and SFX), shows a progress
- * bar, then starts the GameScene directly (no home menu in the start flow).
+ * First scene: preloads only the assets actually needed at startup —
+ * the equipped/fallback card theme icons for LEVEL 1 (a few files instead
+ * of the whole pack; later levels lazy-load their icons behind the level
+ * transition overlay), the slot tray, prop icons and click/merge SFX.
+ * Victory/defeat SFX load lazily on first use (GameScene.ensureAudioAndPlay).
  */
 export default class BootScene extends Phaser.Scene {
   /** Graphics object used to draw the loading progress bar. */
@@ -20,10 +24,12 @@ export default class BootScene extends Phaser.Scene {
     // 未配置时按站内相对路径加载（index.html 与资源同域）。
     this.load.setBaseURL(import.meta.env.VITE_CDN_BASE ?? '')
 
-    // Only the equipped/fallback theme is loaded (~1-2MB instead of 40MB).
+    // 只预载当前主题里第一关会用到的最少图标（其余随关卡懒加载）。
     const theme = pickTheme()
+    const firstTypes = Math.max(1, getPrefetchedFirstIconTypes() ?? LEVELS[0]?.iconTypes ?? 3)
+    const preloadCount = Math.min(firstTypes, theme.iconCount)
 
-    this.loadImages(theme)
+    this.loadImages(theme, preloadCount)
     this.loadAudio()
 
     // Draw the initial bar, then keep it updated while files load.
@@ -39,42 +45,32 @@ export default class BootScene extends Phaser.Scene {
     this.scene.start('GameScene')
   }
 
-  /** All actually-used images (unused originals like loading/rank/win art are
-   *  skipped: dialogs and the leaderboard are HTML overlays, not Canvas art). */
-  private loadImages(theme: { name: string; iconCount: number }): void {
-    // Menu screen
-    this.load.image('images/menu/bgs/menu_bg01.png', 'images/menu/bgs/menu_bg01.png')
-    this.load.image('images/menu/buttons/button_rank.png', 'images/menu/buttons/button_rank.png')
-    this.load.image('images/menu/buttons/button_start.png', 'images/menu/buttons/button_start.png')
-    this.load.image('images/menu/elements/animal_left.png', 'images/menu/elements/animal_left.png')
-    this.load.image('images/menu/elements/animal_right.png', 'images/menu/elements/animal_right.png')
-    this.load.image('images/menu/titles/title.png', 'images/menu/titles/title.png')
-
+  /** All actually-used images (menu art is unused: the game boots straight
+   *  into GameScene; dialogs and the leaderboard are HTML overlays). */
+  private loadImages(theme: { name: string; iconCount: number }, firstCount: number): void {
     // In-game UI（背景由 DOM 层 #bg-container 渐变垫底，不再加载图片背景）
-    this.load.image('images/game/cards/slots.png', 'images/game/cards/slots.png')
+    this.load.image('images/game/cards/slots.webp', 'images/game/cards/slots.webp')
 
     // Props
-    this.load.image('images/game/props/moveOut.png', 'images/game/props/moveOut.png')
-    this.load.image('images/game/props/peek.png', 'images/game/props/peek.png')
-    this.load.image('images/game/props/shuffle.png', 'images/game/props/shuffle.png')
-    this.load.image('images/game/props/undo.png', 'images/game/props/undo.png')
+    this.load.image('images/game/props/moveOut.webp', 'images/game/props/moveOut.webp')
+    this.load.image('images/game/props/peek.webp', 'images/game/props/peek.webp')
+    this.load.image('images/game/props/shuffle.webp', 'images/game/props/shuffle.webp')
+    this.load.image('images/game/props/undo.webp', 'images/game/props/undo.webp')
 
-    // Card theme icons of this run: images/game/cards/themes/<name>/<1..iconCount>.png
-    for (let i = 1; i <= theme.iconCount; i++) {
-      const key = `images/game/cards/themes/${theme.name}/${i}.png`
+    // 仅第一关需要的图标（本次运行的主题；后需图标在切关转场时懒加载）
+    for (let i = 1; i <= firstCount; i++) {
+      const key = themeIconPath(theme.name, i)
       this.load.image(key, key)
     }
+    markIconsLoadedThrough(firstCount)
   }
 
-  /** 所有实际使用的 SFX（BGM 不经 Phaser 加载：由 core/BgmManager.ts 用
-   *  DOM <audio> 懒加载循环播放，避免首屏全量解码与下载）。 */
+  /** 首屏只加载点按/消除音；胜利/失败音由 GameScene 首用时懒加载。 */
   private loadAudio(): void {
     this.load.audio('audio/game/click/normal.mp3', 'audio/game/click/normal.mp3')
     this.load.audio('audio/game/click/cow.mp3', 'audio/game/click/cow.mp3')
     this.load.audio('audio/game/click/horse.mp3', 'audio/game/click/horse.mp3')
     this.load.audio('audio/game/merge.mp3', 'audio/game/merge.mp3')
-    this.load.audio('audio/game/success.mp3', 'audio/game/success.mp3')
-    this.load.audio('audio/game/defeat.mp3', 'audio/game/defeat.mp3')
   }
 
   /**
