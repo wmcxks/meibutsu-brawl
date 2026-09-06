@@ -18,6 +18,10 @@ from app.api.missions import router as missions_router
 from app.api.shop import router as shop_router
 from app.api.configs import router as configs_router
 from app.api.levels import router as levels_router
+from app.api.friends import router as friends_router
+from app.api.errors import router as errors_router
+from app.api.payments import router as payments_router
+from app.api.cosmetics import router as cosmetics_router
 from config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -59,6 +63,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# F3 监控：请求耗时/状态码统计 + 慢请求与错误率告警
+from app.middleware.monitor import MonitorMiddleware
+
+app.add_middleware(MonitorMiddleware)
+
 # 注册路由
 app.include_router(auth_router)
 app.include_router(record_router)
@@ -70,6 +79,10 @@ app.include_router(missions_router)
 app.include_router(shop_router)
 app.include_router(configs_router)
 app.include_router(levels_router)
+app.include_router(friends_router)
+app.include_router(errors_router)
+app.include_router(payments_router)
+app.include_router(cosmetics_router)
 
 
 @app.get("/health")

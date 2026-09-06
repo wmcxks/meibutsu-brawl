@@ -26,10 +26,12 @@ CONFIG_DEFAULTS: dict[str, Any] = {
     "play.daily_max_minutes": 0,  # 每日游戏时长上限（分钟，0 = 不限）
     "play.daily_max_games": 0,    # 每日对局上限（0 = 不限）
     "announcement.text": "",      # 公告文案（空 = 不展示；G2 运营下发）
+    "app.min_client_ver": "",     # 最低客户端版本（H3 强更；小于该版本弹更新页）
+    "app.latest_url": "",         # 强更跳转地址（应用商店 / 安装包 / 官网）
 }
 
 # 可下发给客户端的配置白名单（不进白名单的配置客户端永远看不到）
-PUBLIC_CONFIG_KEYS: set[str] = {"announcement.text"}
+PUBLIC_CONFIG_KEYS: set[str] = {"announcement.text", "app.min_client_ver", "app.latest_url"}
 
 # 读缓存：{key: (value, expire_ts)}，TTL 30s
 _cache: dict[str, tuple[Any, float]] = {}

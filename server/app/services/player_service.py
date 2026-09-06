@@ -12,6 +12,9 @@ from app.models.player_daily import PlayerDaily
 from app.models.wallet import Wallet, WalletLog
 from app.models.user_prop import UserProp
 from app.models.game_event import GameEvent
+from app.models.relation import UserRelation
+from app.models.order import Order
+from app.models.cosmetic import UserCosmetic
 
 logger = logging.getLogger(__name__)
 
@@ -71,10 +74,16 @@ async def delete_account(db: AsyncSession, user_id: int) -> None:
     user = await _load_user(db, user_id)
 
     # 子表数据全部删除（含外键引用方），最后删用户行
-    for model in (Record, WalletLog, Wallet, UserProp, PlayerDaily, CheatLog, GameEvent):
+    for model in (Record, WalletLog, Wallet, UserProp, PlayerDaily, CheatLog, GameEvent, Order, UserCosmetic):
         await db.execute(
             delete(model).where(model.user_id == user_id)
         )
+    # 好友关系双向清理（涉及 user_id / friend_id 两列）
+    await db.execute(
+        delete(UserRelation).where(
+            (UserRelation.user_id == user_id) | (UserRelation.friend_id == user_id)
+        )
+    )
     await db.delete(user)
     await db.commit()
     logger.info(f"[account] user_id={user_id} 账号已注销删除")

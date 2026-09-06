@@ -17,6 +17,8 @@ from app.models.wallet import Wallet, WalletLog
 from app.models.user_prop import UserProp
 from app.models.game_event import GameEvent
 from app.models.mission import UserMission
+from app.models.relation import UserRelation
+from app.models.cosmetic import UserCosmetic
 from app.middleware.auth_middleware import create_token
 from app.schemas.auth import LoginProfile
 from config import get_settings
@@ -180,6 +182,51 @@ async def _merge_guest_into_line(db: AsyncSession, line_openid: str, guest_uuid:
         await db.execute(
             model.__table__.update().where(model.user_id == gid).values(user_id=tid)
         )
+    await db.commit()
+
+    # 2.1) 好友关系改挂（双向列；目标已有同对关系时丢弃游客那行）
+    guest_rels = (
+        await db.execute(
+            select(UserRelation).where(
+                (UserRelation.user_id == gid) | (UserRelation.friend_id == gid)
+            )
+        )
+    ).scalars().all()
+    for rel in guest_rels:
+        if rel.user_id == gid:
+            dup = (
+                await db.execute(
+                    select(UserRelation).where(
+                        UserRelation.user_id == tid, UserRelation.friend_id == rel.friend_id
+                    )
+                )
+            ).scalar_one_or_none()
+            rel.user_id = tid if dup is None else None
+        else:
+            dup = (
+                await db.execute(
+                    select(UserRelation).where(
+                        UserRelation.user_id == rel.user_id, UserRelation.friend_id == tid
+                    )
+                )
+            ).scalar_one_or_none()
+            rel.friend_id = tid if dup is None else None
+        if rel.user_id is None or rel.friend_id is None:
+            await db.delete(rel)
+    await db.commit()
+
+    # 2.2) 装扮改挂（同键冲突 = 目标已拥有该装扮，游客行丢弃，保留目标装备态）
+    guest_cosmetics = (
+        await db.execute(select(UserCosmetic).where(UserCosmetic.user_id == gid))
+    ).scalars().all()
+    for row in guest_cosmetics:
+        dup = await db.get(UserCosmetic, (tid, row.item_key))
+        if dup is None:
+            row.user_id = tid
+        else:
+            if row.equipped and not dup.equipped:
+                dup.equipped = 1
+            await db.delete(row)
     await db.commit()
 
     # 3) 删除游客账号

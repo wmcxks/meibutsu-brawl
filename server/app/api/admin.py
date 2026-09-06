@@ -13,9 +13,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.schemas.admin import AdminBanRequest, AdminCompensateRequest, AdminSetConfigRequest
-from app.services import config_service, player_service, reward_service
+from app.services import config_service, monitor_service, player_service, reward_service
 from app.utils.response import success, error
 from app.models.user import User
+from app.models.client_error import ClientError
 from config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -210,3 +211,64 @@ async def stats_overview(
             "series": series,
         }
     )
+
+
+@router.get("/errors")
+async def list_client_errors(
+    _: None = Depends(require_admin),
+    acknowledged: int | None = Query(default=0, ge=0, le=1, description="0 未处理 / 1 已确认 / 空=全部"),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=50),
+    db: AsyncSession = Depends(get_db),
+):
+    """前端错误列表（F3：崩溃/JS 错误）"""
+    from sqlalchemy import func as sa_func
+
+    conditions = []
+    if acknowledged is not None:
+        conditions.append(ClientError.acknowledged == acknowledged)
+    total = (await db.execute(select(sa_func.count(ClientError.id)).where(*conditions))).scalar_one()
+    stmt = (
+        select(ClientError)
+        .where(*conditions)
+        .order_by(ClientError.id.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    )
+    rows = (await db.execute(stmt)).scalars().all()
+    items = [
+        {
+            "id": e.id,
+            "user_id": e.user_id,
+            "platform": e.platform,
+            "client_ver": e.client_ver,
+            "page_url": e.page_url,
+            "message": e.message,
+            "extras": e.extras,
+            "acknowledged": e.acknowledged,
+            "created_at": e.created_at.isoformat() if e.created_at else None,
+        }
+        for e in rows
+    ]
+    return success(data={"total": total, "items": items})
+
+
+@router.post("/errors/{error_id}/ack")
+async def acknowledge_error(
+    error_id: int,
+    _: None = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """确认错误已处理（置 acknowledged=1，关闭告警列表打扰）"""
+    row = await db.get(ClientError, error_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="错误记录不存在")
+    row.acknowledged = 1
+    await db.commit()
+    return success(data={"id": error_id, "acknowledged": 1})
+
+
+@router.get("/monitor")
+async def monitor_overview(_: None = Depends(require_admin)):
+    """服务端监控概览（F3：本进程请求量/错误率/慢请求）"""
+    return success(data=monitor_service.summary())

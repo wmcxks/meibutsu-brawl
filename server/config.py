@@ -71,6 +71,22 @@ class Settings(BaseSettings):
     # 运营后台鉴权令牌（X-Admin-Token 请求头）；留空 = 后台整体 403 关闭
     ADMIN_TOKEN: str = ""
 
+    # ── F3 监控告警 ──
+    # 单请求耗时超过该毫秒数记慢请求告警；单分钟 5xx 达到该阈值触发错误率告警
+    ALERT_SLOW_MS: int = 2000
+    ALERT_ERROR_PER_MINUTE: int = 10
+    # 可选：群机器人 Webhook（告警时 POST JSON {msg_type:text, text:{content}}）
+    ALERT_WEBHOOK_URL: str = ""
+
+    # ── C3 真实支付渠道（占位；未配置时回调返回 501） ──
+    # LINE Pay（LINEPay API）渠道凭据，接入需商务资质
+    LINE_PAY_CHANNEL_ID: str = ""
+    LINE_PAY_CHANNEL_SECRET: str = ""
+
+    # ── H3 版本/强更 ──
+    # 兜底最低客户端版本（如 "0.1.0"；空 = 不限制），正式值建议写 hd_configs 下发
+    MIN_CLIENT_VER: str = ""
+
     # ── 阿里云 OSS ──
     OSS_ACCESS_KEY_ID: str = ""
     OSS_ACCESS_KEY_SECRET: str = ""

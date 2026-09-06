@@ -9,5 +9,8 @@ from app.models.config_entry import ConfigEntry
 from app.models.order import Order
 from app.models.level import Level
 from app.models.mission import MissionTemplate, UserMission
+from app.models.relation import UserRelation
+from app.models.client_error import ClientError
+from app.models.cosmetic import Cosmetic, UserCosmetic
 
-__all__ = ["User", "Record", "CheatLog", "PlayerDaily", "Wallet", "WalletLog", "UserProp", "GameEvent", "ConfigEntry", "MissionTemplate", "UserMission", "Order", "Level"]
+__all__ = ["User", "Record", "CheatLog", "PlayerDaily", "Wallet", "WalletLog", "UserProp", "GameEvent", "ConfigEntry", "MissionTemplate", "UserMission", "Order", "Level", "UserRelation", "ClientError", "Cosmetic", "UserCosmetic"]

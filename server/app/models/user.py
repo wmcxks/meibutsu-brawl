@@ -26,5 +26,8 @@ class User(Base):
     last_login_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), comment="最近登录时间")
     login_count: Mapped[int] = mapped_column(Integer, default=0, comment="累计登录次数")
 
+    # ── E3 社交：邀请码（懒生成，绑定好友用）──
+    invite_code: Mapped[str] = mapped_column(String(16), unique=True, nullable=True, comment="邀请码（好友互关）")
+
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), comment="创建时间")
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now(), comment="更新时间")
