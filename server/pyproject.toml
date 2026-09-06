@@ -5,6 +5,7 @@ description = "名物大乱斗 - 后端服务"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "alembic>=1.13.0",
     "asyncmy>=0.2.10",
     "fastapi>=0.136.1",
     "httpx>=0.28.1",
