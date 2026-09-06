@@ -2,7 +2,17 @@
 
 复用 `server/.env` 的 `OSS_*` 配置。首次运行：`uv sync`。
 
-## 前端静态资源（H3：CDN 化）
+## 一键发布（推荐）
+
+```bash
+./scripts/deploy_web.sh v0.1.0
+# 提供 ADMIN_TOKEN / ADMIN_BASE_URL 时自动配置 app.latest_url（强更跳转）
+```
+
+内部执行：front 构建（注入版本号 + CDN base）→ `upload_web.py` 上传 → 可选配置 latest_url。
+只构建不上传：`./scripts/deploy_web.sh v0.1.0 --skip-upload`
+
+## 前端静态资源（H3：CDN 化，手动拆解版）
 
 ```bash
 # 1) 构建（注入 CDN base + 版本号）
