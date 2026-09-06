@@ -594,6 +594,12 @@ Alpine.data('gameUI', () => ({
     }
   },
 
+  /** 资源地址（H3：叠加构建期 base，CDN 部署时 HTML UI 图片同样生效） */
+  assetUrl(path: string) {
+    const base: string = import.meta.env.BASE_URL ?? '/'
+    return base === '/' ? path : `${base.replace(/\/$/, '')}${path}`
+  },
+
   /** 商店：打开（默认 gem 充值 Tab；商品只拉一次，装扮每次进面板刷新） */
   async openShop() {
     this.shopOpen = true
