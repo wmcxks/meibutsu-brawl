@@ -175,6 +175,17 @@
               class="cursor-pointer rounded-full border-none px-5 py-1.5 disabled:cursor-not-allowed"
               x-text="rankScopeReady ? ('マイ地域' + (me ? '（' + regionName(me.user.region_code) + '）' : '')) : 'マイ地域（未設定）'"
             ></button>
+            <button
+              @click="setRankScope('friends')"
+              :class="rankScope === 'friends' ? 'bg-[#00b894] text-white' : 'bg-[#eee] text-[#777]'"
+              class="cursor-pointer rounded-full border-none px-5 py-1.5"
+            >友だち</button>
+          </div>
+          <div x-show="rankScope === 'friends'" class="mb-2 flex justify-center">
+            <button
+              @click="openInvite()"
+              class="cursor-pointer rounded-full border border-[#00b894] bg-[#eafaf5] px-4 py-1 text-[12px] font-bold text-[#00b894]"
+            >+ 友達を招待 / コード入力</button>
           </div>
           <ul class="m-0 mb-4 list-none flex-1 overflow-y-auto p-0">
             <template x-for="(item, idx) in leaderboard" :key="idx">
@@ -184,11 +195,68 @@
               </li>
             </template>
           </ul>
-          <div x-show="leaderboard.length === 0" class="py-2 text-sm text-[#999]">クリア記録はまだありません</div>
-          <div x-show="myRank" class="mb-3 text-sm font-bold text-[#7a5c1e]">
+          <div x-show="leaderboard.length === 0 && !friendRankLoading" class="py-2 text-sm text-[#999]">
+            <span x-show="rankScope !== 'friends'">クリア記録はまだありません</span>
+            <span x-show="rankScope === 'friends'">まだ友達がいません。招待コードで始めましょう！</span>
+          </div>
+          <div x-show="myRank && rankScope !== 'friends'" class="mb-3 text-sm font-bold text-[#7a5c1e]">
             あなたの順位：<span x-text="myRank"></span>位
           </div>
+          <div x-show="myRank && rankScope === 'friends'" class="mb-3 text-sm font-bold text-[#00a67c]">
+            友だちの中での順位：<span x-text="myRank"></span>位
+          </div>
           <button @click="closeLeaderboard" class="w-full cursor-pointer rounded-[10px] bg-[#e8b33d] py-3 text-base font-bold text-white">閉じる</button>
+        </div>
+      </div>
+
+      <!-- 邀请码 / 好友管理面板（E3） -->
+      <div
+        x-show="inviteOpen"
+        class="pointer-events-auto absolute inset-0 flex items-center justify-center bg-black/60"
+      >
+        <div class="flex max-h-[80%] w-[84%] max-w-[440px] flex-col rounded-[14px] bg-white p-5 text-center font-sans">
+          <h2 class="m-0 mb-3 text-[20px] font-bold text-[#7a5c1e]">友達を招待</h2>
+          <p class="m-0 mb-1 text-left text-[13px] text-[#888]">あなたの招待コード</p>
+          <div class="mb-2 flex items-center justify-between gap-2 rounded-[10px] bg-[#eafaf5] px-3 py-2.5">
+            <span class="text-[20px] font-bold tracking-widest text-[#00b894]" x-text="inviteCode || '------'"></span>
+            <button
+              @click="copyText(inviteCode, 'コード')"
+              class="shrink-0 cursor-pointer rounded-full border-none bg-[#00b894] px-3 py-1.5 text-[12px] font-bold text-white"
+            >コピー</button>
+          </div>
+          <button
+            @click="shareInvite()"
+            :disabled="!inviteCode"
+            class="mb-3 w-full cursor-pointer rounded-[10px] bg-[#e8b33d] py-2.5 text-sm font-bold text-white disabled:opacity-50"
+          >LINE / 共有で送る</button>
+          <p class="m-0 mb-1 text-left text-[13px] text-[#888]">相手の招待コードを入力</p>
+          <div class="mb-3 flex gap-2">
+            <input
+              x-model="inviteInput"
+              maxlength="16"
+              placeholder="例: A1B2C3"
+              class="min-w-0 flex-1 rounded-[10px] border border-[#ddd] px-3 py-2 text-base uppercase outline-none focus:border-[#00b894]"
+            />
+            <button
+              @click="submitBindCode()"
+              :disabled="inviteBusy || !inviteInput.trim()"
+              class="shrink-0 cursor-pointer rounded-[10px] bg-[#00b894] px-4 py-2 text-sm font-bold text-white disabled:opacity-50"
+            >追加</button>
+          </div>
+          <p class="m-0 mb-1 text-left text-[13px] text-[#888]">友だち（<span x-text="myFriends.length"></span>）</p>
+          <ul class="m-0 mb-4 list-none flex-1 overflow-y-auto border-t border-[#eee] p-0">
+            <template x-for="f in myFriends" :key="f.user_id">
+              <li class="flex items-center justify-between border-b border-[#f2f2f2] py-2 text-sm text-[#444]">
+                <span class="truncate" x-text="f.nickname"></span>
+                <button
+                  @click="removeMyFriend(f)"
+                  class="shrink-0 cursor-pointer border-none bg-transparent text-[12px] text-[#e17055] underline"
+                >削除</button>
+              </li>
+            </template>
+            <li x-show="myFriends.length === 0" class="py-2 text-center text-[#999]">まだ友達がいません</li>
+          </ul>
+          <button @click="inviteOpen = false" class="w-full cursor-pointer rounded-[10px] bg-[#e8b33d] py-3 text-base font-bold text-white">閉じる</button>
         </div>
       </div>
 
@@ -276,33 +344,108 @@
         </div>
       </div>
 
-      <!-- 商店面板（支付渠道接入前的占位流程） -->
+      <!-- 商店面板（gem 充值 / 主题装扮 Tab） -->
       <div
         x-show="shopOpen"
         class="pointer-events-auto absolute inset-0 flex items-center justify-center bg-black/60 font-sans"
       >
-        <div class="flex max-h-[75%] w-[84%] max-w-[440px] flex-col rounded-[14px] bg-white p-5 text-center">
-          <h2 class="m-0 mb-3 text-[20px] font-bold text-[#7a5c1e]">ショップ</h2>
-          <div class="mb-2 flex justify-end">
-            <button @click="cancelPendingOrder()" class="cursor-pointer border-none bg-transparent text-[12px] text-[#999] underline">未完了の注文をキャンセル</button>
+        <div class="flex max-h-[78%] w-[84%] max-w-[440px] flex-col rounded-[14px] bg-white p-5 text-center">
+          <h2 class="m-0 mb-2 text-[20px] font-bold text-[#7a5c1e]">ショップ</h2>
+          <!-- Tab：ジェム充值 / テーマ -->
+          <div class="mb-2 flex justify-center gap-2 text-sm font-bold">
+            <button
+              @click="setShopTab('gem')"
+              :class="shopTab === 'gem' ? 'bg-[#e8b33d] text-white' : 'bg-[#eee] text-[#777]'"
+              class="cursor-pointer rounded-full border-none px-5 py-1.5"
+            >💎 ジェム</button>
+            <button
+              @click="setShopTab('skin')"
+              :class="shopTab === 'skin' ? 'bg-[#00b894] text-white' : 'bg-[#eee] text-[#777]'"
+              class="cursor-pointer rounded-full border-none px-5 py-1.5"
+            >🎨 テーマ</button>
           </div>
-          <ul class="m-0 mb-4 list-none flex-1 overflow-y-auto p-0">
-            <template x-for="p in shopProducts" :key="p.sku">
-              <li class="mb-2 flex items-center justify-between rounded-[10px] bg-[#faf7f0] px-3 py-3">
-                <div class="text-left">
-                  <p class="m-0 text-[15px] font-bold text-[#444]" x-text="p.name"></p>
-                  <p class="m-0 mt-0.5 text-[12px] text-[#999]" x-text="'保有通貨：' + currencyName(p.currency)"></p>
-                </div>
-                <button
-                  @click="buyProduct(p)"
-                  :disabled="shopBuying"
-                  class="ml-2 shrink-0 cursor-pointer rounded-full border-none bg-[#e8b33d] px-5 py-2.5 text-[14px] font-bold text-white disabled:opacity-50"
-                >注文</button>
-              </li>
-            </template>
-          </ul>
-          <div x-show="shopProducts.length === 0" class="py-2 text-sm text-[#999]">準備中です</div>
+
+          <!-- ジェム 充值（C3 占位下单流程） -->
+          <div x-show="shopTab === 'gem'" class="flex min-h-0 flex-col">
+            <div class="mb-2 flex justify-end">
+              <button @click="cancelPendingOrder()" class="cursor-pointer border-none bg-transparent text-[12px] text-[#999] underline">未完了の注文をキャンセル</button>
+            </div>
+            <ul class="m-0 mb-4 list-none flex-1 overflow-y-auto p-0">
+              <template x-for="p in shopProducts" :key="p.sku">
+                <li class="mb-2 flex items-center justify-between rounded-[10px] bg-[#faf7f0] px-3 py-3">
+                  <div class="text-left">
+                    <p class="m-0 text-[15px] font-bold text-[#444]" x-text="p.name"></p>
+                    <p class="m-0 mt-0.5 text-[12px] text-[#999]" x-text="'保有通貨：' + currencyName(p.currency)"></p>
+                  </div>
+                  <button
+                    @click="buyProduct(p)"
+                    :disabled="shopBuying"
+                    class="ml-2 shrink-0 cursor-pointer rounded-full border-none bg-[#e8b33d] px-5 py-2.5 text-[14px] font-bold text-white disabled:opacity-50"
+                  >注文</button>
+                </li>
+              </template>
+            </ul>
+            <div x-show="shopProducts.length === 0" class="py-2 text-sm text-[#999]">準備中です</div>
+          </div>
+
+          <!-- テーマ装扮（C5：gem 购买 / 装备切换） -->
+          <div x-show="shopTab === 'skin'" class="flex min-h-0 flex-col">
+            <p class="m-0 mb-2 text-right text-[13px] font-bold text-[#d89b2e]">
+              所持：<span x-text="(me?.wallet?.gem ?? 0)"></span> ジェム
+            </p>
+            <ul class="m-0 mb-4 list-none flex-1 overflow-y-auto p-0">
+              <template x-for="c in cosmetics" :key="c.item_key">
+                <li class="mb-2 flex items-center justify-between rounded-[10px] bg-[#faf7f0] px-3 py-2.5">
+                  <div class="text-left">
+                    <p class="m-0 text-[14px] font-bold text-[#444]" x-text="c.name"></p>
+                    <p class="m-0 mt-0.5 text-[12px] text-[#999]">
+                      <span x-show="!c.owned" x-text="c.price_gem + ' ジェム'"></span>
+                      <span x-show="c.owned && c.equipped" class="font-bold text-[#00b894]">装着中</span>
+                      <span x-show="c.owned && !c.equipped" class="text-[#00a67c]">所持</span>
+                    </p>
+                  </div>
+                  <button
+                    x-show="!c.owned"
+                    @click="buySkin(c)"
+                    :disabled="cosmeticBusy"
+                    class="ml-2 shrink-0 cursor-pointer rounded-full border-none bg-[#e8b33d] px-4 py-2 text-[13px] font-bold text-white disabled:opacity-50"
+                  >購入</button>
+                  <button
+                    x-show="c.owned && !c.equipped"
+                    @click="equipSkin(c)"
+                    :disabled="cosmeticBusy"
+                    class="ml-2 shrink-0 cursor-pointer rounded-full border border-[#00b894] bg-white px-4 py-2 text-[13px] font-bold text-[#00b894] disabled:opacity-50"
+                  >装着</button>
+                </li>
+              </template>
+            </ul>
+            <div x-show="cosmetics.length === 0" class="py-2 text-sm text-[#999]">準備中です</div>
+          </div>
+
           <button @click="shopOpen = false" class="w-full cursor-pointer rounded-[10px] bg-[#e8b33d] py-3 text-base font-bold text-white">閉じる</button>
+        </div>
+      </div>
+
+      <!-- H3 强更遮罩（版本低于 app.min_client_ver 时全屏拦截） -->
+      <div
+        x-show="updateRequired"
+        class="pointer-events-auto absolute inset-0 z-50 flex items-center justify-center bg-white"
+      >
+        <div class="max-w-[420px] px-8 text-center font-sans">
+          <p class="mb-3 text-[26px]">🔄</p>
+          <h2 class="m-0 mb-3 text-[20px] font-bold text-[#7a5c1e]">新しいバージョンが利用できます</h2>
+          <p class="m-0 mb-5 text-[14px] leading-relaxed text-[#666]">
+            現在のバージョン <span x-text="updateCurrentVer"></span> はサポート対象外になりました。<br/>
+            最新版（<span x-text="updateMinVer"></span>）に更新してください。
+          </p>
+          <a
+            x-show="updateLatestUrl"
+            :href="updateLatestUrl"
+            target="_blank"
+            rel="noopener"
+            class="block w-full cursor-pointer rounded-[10px] bg-[#e8b33d] py-3 text-base font-bold text-white no-underline"
+          >更新する</a>
+          <p x-show="!updateLatestUrl" class="m-0 text-[13px] text-[#999]">ストアまたは配布ページから更新してください</p>
         </div>
       </div>
       </div>

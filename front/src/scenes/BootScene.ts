@@ -4,7 +4,7 @@ import { pickTheme } from '../core/themes'
 /**
  * BootScene
  * First scene of the game: preloads the assets actually used this run
- * (one randomly picked card theme, game/menu art and SFX), shows a progress
+ * (the equipped/fallback card theme, game/menu art and SFX), shows a progress
  * bar, then starts the GameScene directly (no home menu in the start flow).
  */
 export default class BootScene extends Phaser.Scene {
@@ -16,10 +16,11 @@ export default class BootScene extends Phaser.Scene {
   }
 
   preload(): void {
-    // Reserved: configure a global CDN/OSS base URL here when needed.
-    this.load.setBaseURL('')
+    // H3：资源走 CDN/OSS。构建期 VITE_CDN_BASE 注入（如 https://cdn.example.com/meibutsu/），
+    // 未配置时按站内相对路径加载（index.html 与资源同域）。
+    this.load.setBaseURL(import.meta.env.VITE_CDN_BASE ?? '')
 
-    // Only the theme picked for this run is loaded (~7MB instead of 40MB).
+    // Only the equipped/fallback theme is loaded (~1-2MB instead of 40MB).
     const theme = pickTheme()
 
     this.loadImages(theme)

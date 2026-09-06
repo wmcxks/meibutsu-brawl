@@ -26,7 +26,7 @@ const BASE_URL: string =
   import.meta.env.VITE_API_BASE_URL ??
   `${location.protocol}//${location.hostname}:8089`
 
-import type { ApiResponse, MissionItem, PlayerSummary, RankResponse, RemoteLevel, ShopProduct } from '../types/api'
+import type { ApiResponse, MissionItem, PlayerSummary, RankResponse, RemoteLevel, ShopProduct, FriendItem, FriendRankItem, CosmeticItem } from '../types/api'
 
 /** startGameSession hard timeout (fast fail, no retry). */
 const START_TIMEOUT_MS = 3000
@@ -350,6 +350,63 @@ export async function createShopOrder(sku: string): Promise<{ order_no: string; 
 /** POST /api/shop/order/cancel：取消我的待支付订单。 */
 export async function cancelShopOrder(): Promise<void> {
   await request('/api/shop/order/cancel', { method: 'POST' })
+}
+
+/*
+ * ============================================================================
+ * 好友社交（E3：邀请码互关 + 好友榜）
+ * ============================================================================
+ */
+
+/** GET /api/friends/invite：我的邀请码（懒生成）。 */
+export async function fetchInviteCode(): Promise<string> {
+  const data = await request<{ code: string }>('/api/friends/invite')
+  return data?.code ?? ''
+}
+
+/** GET /api/friends：我的好友列表。 */
+export async function fetchFriends(): Promise<FriendItem[]> {
+  const data = await request<{ items: FriendItem[] }>('/api/friends')
+  return data?.items ?? []
+}
+
+/** POST /api/friends/bind：输入邀请码建立互关（幂等）。 */
+export async function bindFriend(code: string): Promise<{ matched: boolean; friend?: FriendItem }> {
+  return request('/api/friends/bind', { method: 'POST', data: { code } })
+}
+
+/** DELETE /api/friends/{user_id}：解除好友。 */
+export async function removeFriend(friendId: number): Promise<void> {
+  await request(`/api/friends/${friendId}`, { method: 'DELETE' })
+}
+
+/** GET /api/friends/rank：好友榜（含自己在内，每关最快）。 */
+export async function getFriendRank(levelId = 1, limit = 50): Promise<{ rank: FriendRankItem[]; my_rank: number | null }> {
+  const query = new URLSearchParams({ level_id: String(levelId), limit: String(limit) })
+  const data = await request<{ rank: FriendRankItem[]; my_rank: number | null }>(`/api/friends/rank?${query.toString()}`)
+  return data ?? { rank: [], my_rank: null }
+}
+
+/*
+ * ============================================================================
+ * 装扮（C5：主题商店 / 装备）
+ * ============================================================================
+ */
+
+/** GET /api/cosmetics/mine：我的装扮与装备态。 */
+export async function fetchCosmeticsMine(): Promise<CosmeticItem[]> {
+  const data = await request<{ items: CosmeticItem[] }>('/api/cosmetics/mine')
+  return data?.items ?? []
+}
+
+/** POST /api/cosmetics/buy：gem 购买装扮（买即装备）。 */
+export async function buyCosmetic(itemKey: string): Promise<void> {
+  await request('/api/cosmetics/buy', { method: 'POST', data: { item_key: itemKey } })
+}
+
+/** POST /api/cosmetics/equip：装备已拥有装扮。 */
+export async function equipCosmetic(itemKey: string): Promise<void> {
+  await request('/api/cosmetics/equip', { method: 'POST', data: { item_key: itemKey } })
 }
 
 /** GET /api/configs/public：客户端可见远端配置（公告等，无需登录）。 */

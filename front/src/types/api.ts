@@ -73,6 +73,35 @@ export interface ShopProduct {
   amount: number
 }
 
+/** 好友条目（E3：GET /api/friends）。 */
+export interface FriendItem {
+  user_id: number
+  nickname: string
+  avatar_url: string
+  region_code: string
+  since: string | null
+}
+
+/** 好友榜条目（E3：GET /api/friends/rank，含自己在内）。 */
+export interface FriendRankItem {
+  rank: number
+  user_id: number
+  nickname: string
+  avatar_url: string
+  region_code: string
+  best_time: number
+}
+
+/** 装扮目录/拥有条目（C5）。 */
+export interface CosmeticItem {
+  item_key: string
+  kind: 'theme' | string
+  name: string
+  price_gem: number
+  owned: boolean
+  equipped: boolean
+}
+
 /** Unified backend response envelope: { code, message, data }. */
 export interface ApiResponse<T> {
   code: number

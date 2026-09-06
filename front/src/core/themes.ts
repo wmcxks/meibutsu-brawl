@@ -1,12 +1,11 @@
 /**
  * themes.ts
  * Card theme registry — pure data, no Phaser / DOM code.
- * Mirrors the original client/scenes/game/renders/themes.js: a global
- * "current theme" is picked once at boot, so BootScene only preloads the
- * icons of the theme actually used this run.
- * 当前只启用 irasutoya（いらすとや）一个图片包；如需重新启用多包，
- * 将更多 { name, iconCount } 加回 CARD_THEMES 即可（iconCount 必须与
- * public/images/game/cards/themes/<name>/ 下的图片数一致）。
+ *
+ * C5（装扮商店）：CARD_THEMES 里每个名字对应一组卡面图，目录种子在服务端
+ * hd_cosmetics 中按相同 name 定价（irasutoya = 免费默认款，其余 gem 购买）。
+ * 装备的主题写 localStorage('hd_theme')，BootScene 启动时按它预加载卡面；
+ * 未装备任何主题（或本地缓存被清）时回退免费默认款。
  */
 
 export interface CardTheme {
@@ -14,18 +13,52 @@ export interface CardTheme {
   iconCount: number
 }
 
+/** 全部可用卡面包（名字必须与 public/images/game/cards/themes/<name>/ 及
+ *  服务端 hd_cosmetics.item_key 一致；iconCount = 该目录下图片数）。 */
 export const CARD_THEMES: CardTheme[] = [
-  { name: 'irasutoya', iconCount: 30 },
+  { name: 'irasutoya', iconCount: 30 },   // 免费默认款
+  { name: 'animals', iconCount: 18 },
+  { name: 'fruits', iconCount: 14 },
+  { name: 'vegetable', iconCount: 14 },
+  { name: 'childhood', iconCount: 14 },
+  { name: 'work', iconCount: 14 },
+  { name: 'beach', iconCount: 14 },
 ]
 
-/** Default theme (fallback before pickRandom). */
+/** Default theme（未装备时的兜底）。 */
 const DEFAULT_THEME = CARD_THEMES[0]
+
+/** localStorage 键：装备中的主题名（main.ts 启动时与服务端装备态同步）。 */
+const THEME_STORAGE_KEY = 'hd_theme'
 
 let currentTheme: CardTheme = DEFAULT_THEME
 
-/** Pick a random theme as the current one (call once at boot). */
+function findTheme(name: string): CardTheme | null {
+  return CARD_THEMES.find((t) => t.name === name) ?? null
+}
+
+/** 本地装备中的主题（localStorage；无效值返回 null）。 */
+export function getLocalEquippedTheme(): CardTheme | null {
+  try {
+    const name = localStorage.getItem(THEME_STORAGE_KEY)
+    return name ? findTheme(name) : null
+  } catch {
+    return null
+  }
+}
+
+/** 写本地装备主题（装备/购买成功后由 UI 层调用）。 */
+export function setLocalEquippedTheme(name: string): void {
+  try {
+    localStorage.setItem(THEME_STORAGE_KEY, name)
+  } catch {
+    /* 隐私模式下静默失败 */
+  }
+}
+
+/** 确定本局使用的主题：优先本地装备，其次免费默认款。 */
 export function pickTheme(): CardTheme {
-  currentTheme = CARD_THEMES[Math.floor(Math.random() * CARD_THEMES.length)]
+  currentTheme = getLocalEquippedTheme() ?? DEFAULT_THEME
   return currentTheme
 }
 

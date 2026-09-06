@@ -7,6 +7,8 @@ import GameScene from './scenes/GameScene'
 import { EventBus } from './core/EventBus'
 import { initUiScaler } from './core/uiScaler'
 import { setBgmMuted } from './core/BgmManager'
+import { setLocalEquippedTheme } from './core/themes'
+import { initErrorReporting } from './core/clientErrors'
 import { GAME_WIDTH, computeDesignHeight } from './core/viewport'
 import {
   saveScore,
@@ -21,9 +23,20 @@ import {
   fetchProducts,
   createShopOrder,
   cancelShopOrder,
+  fetchInviteCode,
+  fetchFriends,
+  bindFriend,
+  removeFriend,
+  getFriendRank,
+  fetchCosmeticsMine,
+  buyCosmetic,
+  equipCosmetic,
 } from './api/request'
 import { SDKManager } from './sdk/SDKManager'
-import type { MissionItem, PlayerSummary, RankItem, ShopProduct } from './types/api'
+import type { MissionItem, PlayerSummary, RankItem, ShopProduct, FriendItem, CosmeticItem } from './types/api'
+
+// 客户端版本（H3 强更判定；构建期 VITE_APP_VERSION 注入，默认 0.0.0）
+const APP_VERSION: string = import.meta.env.VITE_APP_VERSION ?? '0.0.0'
 
 // 设计稿高度随设备宽高比动态取（1280~1600，见 core/viewport.ts），
 // 全面屏手机画面铺满全屏，不再在道具栏下方留下大片空白。
@@ -66,6 +79,12 @@ async function bootstrap(): Promise<void> {
     console.warn('[sdk] 平台初始化/登录失败，以匿名模式启动:', err)
   }
 
+  // F3：全局错误捕获（游戏创建前注册，覆盖 Phaser 运行时错误）
+  initErrorReporting()
+
+  // C5：启动前与服务端同步装备主题（本地缓存驱动 BootScene 卡面预加载）
+  await syncEquippedTheme()
+
   gameInstance = new Phaser.Game(config)
 
   // 首屏幕布：等 Phaser 启动、BootScene 资源加载完成（其 create 即将
@@ -89,7 +108,33 @@ async function bootstrap(): Promise<void> {
   track('page_load', { platform: SDKManager.adapter.platform })
 }
 
+/** C5：把服务端装备主题同步进本地缓存（BootScene 预加载依据；失败静默） */
+async function syncEquippedTheme(): Promise<void> {
+  try {
+    const items = await fetchCosmeticsMine()
+    const equipped = items.find((it) => it.kind === 'theme' && it.equipped)
+    if (equipped) setLocalEquippedTheme(equipped.item_key)
+  } catch (err) {
+    console.warn('[theme] 同步装备主题失败（沿用本地缓存）:', err)
+  }
+}
+
+/** 语义化版本号比较：a>b 返回 1，a==b 返回 0，a<b 返回 -1 */
+export function compareVersions(a: string, b: string): number {
+  const pa = String(a).split('.').map((n) => parseInt(n, 10) || 0)
+  const pb = String(b).split('.').map((n) => parseInt(n, 10) || 0)
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const x = pa[i] ?? 0
+    const y = pb[i] ?? 0
+    if (x !== y) return x > y ? 1 : -1
+  }
+  return 0
+}
+
 void bootstrap()
+
+/** 排行榜维度（E3：加入「友だち」档） */
+type RankScope = 'national' | 'my' | 'friends'
 
 /** 日本都道府県（JIS X 0401）— 区域排行与资料选择共用 */
 const JP_PREFECTURES: Array<{ code: string; name: string }> = [
@@ -137,12 +182,30 @@ Alpine.data('gameUI', () => ({
   me: null as PlayerSummary | null,
   /** 都道府県选项（资料面板区域选择） */
   prefectures: JP_PREFECTURES,
-  /** 排行榜显示维度：national 全国 / my 我的区域 */
-  rankScope: 'national' as 'national' | 'my',
+  /** 排行榜显示维度：national 全国 / my 我的区域 / friends 友だち */
+  rankScope: 'national' as RankScope,
   /** 我的名次（服务端返回，可能为 null） */
   myRank: null as number | null,
   /** 排行榜区域榜是否可用（尚未选择区域时为 false） */
   rankScopeReady: false,
+  /** E3 好友邀请面板状态 */
+  inviteOpen: false,
+  inviteCode: '',
+  inviteInput: '',
+  inviteBusy: false,
+  myFriends: [] as FriendItem[],
+  /** E3 好友榜加载中 */
+  friendRankLoading: false,
+  /** C5 装扮商店（shopTab：gem 充值 / skin 装扮） */
+  cosmetics: [] as CosmeticItem[],
+  cosmeticBusy: false,
+  /** H3 强更遮罩：需要更新时全屏拦截 */
+  updateRequired: false,
+  updateLatestUrl: '',
+  updateMinVer: '',
+  updateCurrentVer: APP_VERSION,
+  /** E3 邀请链接（含 ?invite=CODE，分享用） */
+  inviteLink: '',
   profileOpen: false,
   profileNickname: '',
   profileRegion: '',
@@ -152,6 +215,7 @@ Alpine.data('gameUI', () => ({
   missionsLoading: false,
   missionsScope: 'daily' as 'daily' | 'weekly' | 'achievement',
   shopOpen: false,
+  shopTab: 'gem' as 'gem' | 'skin',
   shopProducts: [] as ShopProduct[],
   shopBuying: false,
 
@@ -206,8 +270,56 @@ Alpine.data('gameUI', () => ({
     // 拉取远端公告（G2：运营后台配置即下发，无需发版）
     void this.loadAnnouncement()
 
+    // H3：版本门槛检查（配置 min_client_ver 且高于当前版本 → 强更遮罩）
+    void this.checkVersionGate()
+
+    // E3：分享链接带 ?invite=CODE → 启动后自动绑定好友（幂等）
+    this.autoBindInvite()
+
     // 启动后拉取我的资料/统计（登录已在 bootstrap 完成）
     void this.refreshMe()
+  },
+
+  /** H3：读取公开配置的 app.min_client_ver / app.latest_url 并比对当前版本 */
+  async checkVersionGate() {
+    try {
+      const cfg = await fetchPublicConfigs()
+      const min = cfg['app.min_client_ver']
+      const minVer = typeof min === 'string' ? min.trim() : ''
+      if (minVer && compareVersions(APP_VERSION, minVer) < 0) {
+        this.updateMinVer = minVer
+        this.updateCurrentVer = APP_VERSION
+        const url = cfg['app.latest_url']
+        this.updateLatestUrl = typeof url === 'string' ? url : ''
+        this.updateRequired = true
+        track('version_gate', { current: APP_VERSION, min: minVer })
+      }
+    } catch (err) {
+      console.warn('[version] 版本检查失败（跳过强更）:', err)
+    }
+  },
+
+  /** E3：读取 ?invite=CODE 并自动建立互关（成功/失败仅 toast，清掉 URL 参数） */
+  autoBindInvite() {
+    try {
+      const params = new URLSearchParams(location.search)
+      const code = (params.get('invite') ?? '').trim().toUpperCase()
+      const clean = location.pathname + location.search.replace(/[?&]invite=[^&]*/i, '')
+      history.replaceState(null, '', clean || location.pathname)
+      if (!code) return
+      bindFriend(code)
+        .then((res) => {
+          const name = res.friend?.nickname ?? ''
+          this.showToast(name ? `「${name}」と友達になりました！` : '友達になりました！', 3000)
+          track('friend_bind', { ok: true })
+        })
+        .catch((err: unknown) => {
+          console.warn('[friends] 邀请码绑定失败:', err)
+          this.showToast('招待コードを利用できませんでした')
+        })
+    } catch {
+      /* 非标准 URL 环境静默跳过 */
+    }
   },
 
   /** 道具按钮：通知场景执行对应效果。 */
@@ -265,17 +377,21 @@ Alpine.data('gameUI', () => ({
       })
   },
 
-  /** 打开排行榜（默认全国；可传 'my' 切换我的区域榜） */
-  showLeaderboard(scope: 'national' | 'my' = 'national') {
+  /** 打开排行榜（默认全国；可传 'my' 区域榜 / 'friends' 好友榜） */
+  showLeaderboard(scope: RankScope = 'national') {
     this.leaderboardVisible = true
-    this.loadLeaderboard(scope)
+    this.setRankScope(scope)
   },
 
-  /** 区域 Tab 切换 */
-  setRankScope(scope: 'national' | 'my') {
+  /** 维度 Tab 切换（区域榜需已设置区域；好友榜随时可用） */
+  setRankScope(scope: RankScope) {
     if (scope === 'my' && !this.rankScopeReady) return
     this.rankScope = scope
-    this.loadLeaderboard(scope)
+    if (scope === 'friends') {
+      void this.loadFriendBoard()
+    } else {
+      this.loadLeaderboard(scope)
+    }
   },
 
   loadLeaderboard(scope: 'national' | 'my') {
@@ -292,8 +408,110 @@ Alpine.data('gameUI', () => ({
       })
   },
 
+  /** E3：好友榜加载（互关 + 自己，每关最快） */
+  async loadFriendBoard() {
+    this.friendRankLoading = true
+    try {
+      const res = await getFriendRank(this.currentLevel)
+      this.leaderboard = res.rank as unknown as RankItem[]
+      this.myRank = res.my_rank
+      if (this.myFriends.length === 0) void this.loadMyFriends()
+    } catch (err) {
+      console.warn('[rank] 好友榜加载失败:', err)
+      this.leaderboard = []
+      this.myRank = null
+    } finally {
+      this.friendRankLoading = false
+    }
+  },
+
+  /** E3：打开邀请/好友管理面板 */
+  async openInvite() {
+    this.inviteOpen = true
+    try {
+      if (!this.inviteCode) {
+        this.inviteCode = await fetchInviteCode()
+      }
+      this.inviteLink = `${location.origin}${location.pathname}?invite=${this.inviteCode}`
+    } catch (err) {
+      console.warn('[friends] 获取邀请码失败:', err)
+      this.inviteCode = ''
+    }
+    await this.loadMyFriends()
+  },
+
+  /** E3：刷新好友列表 */
+  async loadMyFriends() {
+    try {
+      this.myFriends = await fetchFriends()
+    } catch (err) {
+      console.warn('[friends] 好友列表加载失败:', err)
+      this.myFriends = []
+    }
+  },
+
+  /** E3：复制邀请码/链接到剪贴板（失败时降级提示） */
+  async copyText(text: string, label: string) {
+    try {
+      await navigator.clipboard.writeText(text)
+      this.showToast(`${label}をコピーしました`)
+    } catch {
+      this.showToast(text)
+    }
+  },
+
+  /** E3：平台分享邀请（LINE shareTargetPicker / Web Share API） */
+  shareInvite() {
+    const code = this.inviteCode
+    const link = this.inviteLink
+    if (!code) {
+      this.showToast('招待コードを取得できません')
+      return
+    }
+    const text = `名物大乱斗で一緒に遊ぼう！私の招待コードは ${code}\n${link}`
+    SDKManager.adapter.share(
+      SDKManager.adapter.platform === 'line'
+        ? [{ type: 'text', text }]
+        : { title: '名物大乱斗（邀请）', text, url: link },
+    )
+  },
+
+  /** E3：输入对方的邀请码手动绑定 */
+  async submitBindCode() {
+    const code = this.inviteInput.trim().toUpperCase()
+    if (!code) return
+    if (this.inviteBusy) return
+    this.inviteBusy = true
+    try {
+      await bindFriend(code)
+      this.inviteInput = ''
+      this.showToast('友達になりました！')
+      await this.loadMyFriends()
+      if (this.rankScope === 'friends') void this.loadFriendBoard()
+    } catch (err) {
+      console.warn('[friends] 绑定失败:', err)
+      this.showToast('コードが無効です')
+    } finally {
+      this.inviteBusy = false
+    }
+  },
+
+  /** E3：解除好友 */
+  async removeMyFriend(friend: FriendItem) {
+    try {
+      await removeFriend(friend.user_id)
+      this.myFriends = this.myFriends.filter((f) => f.user_id !== friend.user_id)
+      this.showToast('友達を削除しました')
+      if (this.rankScope === 'friends') void this.loadFriendBoard()
+    } catch (err) {
+      console.warn('[friends] 删除失败:', err)
+      this.showToast('削除に失敗しました')
+    }
+  },
+
   closeLeaderboard() {
     this.leaderboardVisible = false
+    this.inviteOpen = false
   },
 
   async loadAnnouncement() {
@@ -376,7 +594,7 @@ Alpine.data('gameUI', () => ({
     }
   },
 
-  /** 商店：加载商品 */
+  /** 商店：打开（默认 gem 充值 Tab；商品只拉一次，装扮每次进面板刷新） */
   async openShop() {
     this.shopOpen = true
     if (this.shopProducts.length === 0) {
@@ -386,6 +604,61 @@ Alpine.data('gameUI', () => ({
         console.warn('[shop] 商品目录加载失败:', err)
         this.shopProducts = []
       }
+    }
+    if (this.shopTab === 'skin' || this.cosmetics.length === 0) {
+      await this.reloadCosmetics()
+    }
+  },
+
+  /** 商店 Tab 切换：gem 充值 / skin 装扮 */
+  async setShopTab(tab: 'gem' | 'skin') {
+    this.shopTab = tab
+    if (tab === 'skin') await this.reloadCosmetics()
+  },
+
+  /** C5：拉取装扮商店列表（含拥有/装备态） */
+  async reloadCosmetics() {
+    try {
+      this.cosmetics = await fetchCosmeticsMine()
+    } catch (err) {
+      console.warn('[shop] 装扮列表加载失败:', err)
+      this.cosmetics = []
+    }
+  },
+
+  /** C5：购买装扮（gem 扣款成功后本地写主题缓存并刷新页面生效） */
+  async buySkin(item: CosmeticItem) {
+    if (this.cosmeticBusy) return
+    this.cosmeticBusy = true
+    try {
+      await buyCosmetic(item.item_key)
+      setLocalEquippedTheme(item.item_key)
+      await this.refreshMe()
+      this.showToast('購入して装着しました')
+      window.setTimeout(() => location.reload(), 600)
+    } catch (err) {
+      console.warn('[shop] 购买装扮失败:', err)
+      this.showToast('購入できませんでした（ジェム不足？）')
+      await this.refreshMe()
+    } finally {
+      this.cosmeticBusy = false
+    }
+  },
+
+  /** C5：装备已拥有装扮（免费款/已购均可；写本地缓存后刷新页面生效） */
+  async equipSkin(item: CosmeticItem) {
+    if (this.cosmeticBusy) return
+    this.cosmeticBusy = true
+    try {
+      await equipCosmetic(item.item_key)
+      setLocalEquippedTheme(item.item_key)
+      this.showToast('装着しました')
+      window.setTimeout(() => location.reload(), 600)
+    } catch (err) {
+      console.warn('[shop] 装备失败:', err)
+      this.showToast('装着に失敗しました')
+    } finally {
+      this.cosmeticBusy = false
     }
   },
 
