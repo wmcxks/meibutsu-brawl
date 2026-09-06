@@ -15,6 +15,7 @@
    回调按 transactionId 反查订单（见 resolve_order）
 """
 
+import base64
 import hashlib
 import hmac
 import json
@@ -49,13 +50,16 @@ class PaymentProvider:
 
 
 class LinePayProvider(PaymentProvider):
-    """LINE Pay（LINEPay API）适配器骨架
+    """LINE Pay（LINEPay API）适配器
 
-    真实验签（接入时按 LINE Pay 官方文档核对）：
+    真实验签（按 LINE Pay 官方约定）：
       - 请求头 X-LINE-ChannelId == LINE_PAY_CHANNEL_ID
-      - 签名 = HMAC-SHA256(channelSecret, raw_body) 的 hex 值，
-        与请求头 X-LINE-Authorization 中 `<rawbody> <signature>` 的 signature 比较
-    本骨架仅校验 ChannelId 头并解析 JSON，完整 HMAC 校验在凭据就位后启用。
+      - 请求头 X-LINE-Authorization = "<签名原文> <签名>"，其中：
+          签名      = Base64( HMAC-SHA256(key=ChannelSecret, msg=签名原文) )
+          回调场景  签名原文 = 我方先前「下单/確認请求」发给 LINE 的原始 body
+      - 回调的 HTTP body 不参与签名（可能被渠道转码），一律以 X-LINE-Authorization
+        内嵌的原始 body 为准做验签与数据解析
+    凭据未配置时抛 NotConfigured（接口层转 501）。
     """
 
     name = "line_pay"
@@ -69,15 +73,28 @@ class LinePayProvider(PaymentProvider):
         if channel_id != settings.LINE_PAY_CHANNEL_ID:
             raise PaymentVerificationError("渠道 ID 不匹配")
 
-        # TODO(商务资质就位)：启用 HMAC 验签
-        #   sig_line = headers.get("x-line-authorization", "")
-        #   expect = hmac.new(settings.LINE_PAY_CHANNEL_SECRET.encode(), raw_body, hashlib.sha256).hexdigest()
-        #   if not sig_line.endswith(expect): raise PaymentVerificationError("签名校验失败")
+        auth = headers.get("x-line-authorization") or headers.get("X-LINE-Authorization", "")
+        # 格式："<签名原文> <Base64签名>"（签名原文可能含空格，取最后一个空格分隔）
+        split = auth.rsplit(" ", 1)
+        if len(split) != 2 or not split[0] or not split[1]:
+            raise PaymentVerificationError("缺少签名头")
+        signed_body, provided_sig = split[0], split[1]
 
+        expect_sig = base64.b64encode(
+            hmac.new(
+                settings.LINE_PAY_CHANNEL_SECRET.encode("utf-8"),
+                signed_body.encode("utf-8"),
+                hashlib.sha256,
+            ).digest()
+        ).decode("ascii")
+        if not hmac.compare_digest(expect_sig, provided_sig):
+            raise PaymentVerificationError("签名校验失败")
+
+        # 回调 HTTP body 不参与签名 → 以签名原文解析业务数据
         try:
-            payload = json.loads(raw_body.decode("utf-8"))
+            payload = json.loads(signed_body)
         except (json.JSONDecodeError, UnicodeDecodeError) as e:
-            raise PaymentVerificationError(f"回调内容非法: {e}") from None
+            raise PaymentVerificationError(f"签名原文不是合法 JSON: {e}") from None
         return {
             "transaction_id": str(payload.get("transactionId") or payload.get("reservationId") or ""),
             "order_no": str(payload.get("order_no") or ""),
