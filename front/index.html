@@ -154,7 +154,40 @@
         </div>
       </div>
 
-      <!-- 排行榜面板（全国 / 我的区域 切换 + 我的名次） -->
+      <!-- 全ステージクリア（最后一关通关结算：用时 + 排名） -->
+      <div
+        x-show="completeVisible"
+        class="pointer-events-auto absolute inset-0 flex items-center justify-center bg-black/60 font-sans"
+      >
+        <div class="w-[78%] max-w-[440px] rounded-[14px] bg-white p-7 text-center">
+          <p class="m-0 mb-2 text-[30px]">🎉</p>
+          <h2 class="m-0 mb-1 text-[22px] font-bold text-[#7a5c1e]">全ステージクリア！</h2>
+          <p class="m-0 mb-5 text-[13px] text-[#999]">すべてのステージを攻略しました</p>
+          <div class="mb-3 flex justify-center gap-3">
+            <div class="flex-1 rounded-[10px] bg-[#faf7f0] px-3 py-3">
+              <p class="m-0 text-[12px] text-[#888]">クリア時間</p>
+              <p class="m-0 mt-1 text-[18px] font-bold text-[#d89b2e]" x-text="formatTime(completeScore)"></p>
+            </div>
+            <div class="flex-1 rounded-[10px] bg-[#faf7f0] px-3 py-3">
+              <p class="m-0 text-[12px] text-[#888]">ランキング</p>
+              <p class="m-0 mt-1 text-[18px] font-bold text-[#00a67c]">
+                <span x-show="completeRank != null" x-text="completeRank + ' 位'"></span>
+                <span x-show="completeRank == null" x-text="completeRankLoading ? '…' : '圏外'"></span>
+              </p>
+            </div>
+          </div>
+          <button
+            @click="restartFromStageOne()"
+            class="w-full cursor-pointer rounded-[10px] bg-[#e8b33d] py-3 text-base font-bold text-white"
+          >もう一度最初から挑戦</button>
+          <button
+            @click="closeComplete()"
+            class="mt-2.5 w-full cursor-pointer rounded-[10px] border border-[#e8b33d] bg-white py-3 text-base font-bold text-[#b8860b]"
+          >閉じる</button>
+        </div>
+      </div>
+
+      <!-- 排行榜面板（全国 / 我的区域 / 好友 切换 + 我的名次） -->
       <div
         x-show="leaderboardVisible"
         class="pointer-events-auto absolute inset-0 flex items-center justify-center bg-black/60"

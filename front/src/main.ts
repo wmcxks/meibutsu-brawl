@@ -181,6 +181,11 @@ Alpine.data('gameUI', () => ({
   _announcementShown: false,
   /** 当前所在关卡（LEVEL_STARTED 时更新，供排行榜默认维度使用） */
   currentLevel: 1,
+  /** 全ステージクリア结算面板状态（最后一关通关：用时 + 本关排名） */
+  completeVisible: false,
+  completeScore: 0,
+  completeRank: null as number | null,
+  completeRankLoading: false,
   /** 我的资料 + 累计统计（/api/user/me，启动后拉取一次） */
   me: null as PlayerSummary | null,
   /** 都道府県选项（资料面板区域选择） */
@@ -236,6 +241,12 @@ Alpine.data('gameUI', () => ({
       this.score = elapsed
       track('level_win', { level, duration: elapsed })
       this.reportScore(level, sessionId, 'win')
+    })
+    EventBus.on('GAME_COMPLETE', (elapsed: number, level: number, sessionId: string) => {
+      // 最后一关通关：先上报成绩，再拉本关排名，最后弹出结算面板
+      this.score = elapsed
+      track('level_win', { level, duration: elapsed, complete: true })
+      void this.showCompleteResult(elapsed, level, sessionId)
     })
     EventBus.on('REVIVE_OFFERED', (score: number, level: number, sessionId: string) => {
       this._lastRun = { score: score ?? 0, level: level ?? 1, sessionId: sessionId ?? '' }
@@ -734,6 +745,39 @@ Alpine.data('gameUI', () => ({
   /** Format a best_time value for display. */
   formatTime(seconds: number) {
     return `${seconds.toFixed(1)}s`
+  },
+
+  /** 末关结算：先确保成绩已入库（影响排名），再查询本关我的名次并弹窗 */
+  async showCompleteResult(score: number, level: number, sessionId: string) {
+    this.completeScore = score
+    this.completeVisible = true
+    this.completeRank = null
+    this.completeRankLoading = true
+    try {
+      await saveScore(score, level, sessionId, 'win')
+    } catch (err) {
+      console.warn('[complete] 成绩上报失败（排名可能不可用）:', err)
+    }
+    try {
+      const res = await getLeaderboard(level, '')
+      this.completeRank = res.my_rank
+    } catch (err) {
+      console.warn('[complete] 排名查询失败:', err)
+      this.completeRank = null
+    } finally {
+      this.completeRankLoading = false
+    }
+  },
+
+  /** 结算面板：回到第 1 关重新挑战 */
+  restartFromStageOne() {
+    this.completeVisible = false
+    EventBus.emit('COMPLETE_RESTART')
+  },
+
+  /** 结算面板：关闭（停留在当前画面；可在排行榜查看成绩） */
+  closeComplete() {
+    this.completeVisible = false
   },
 
   restartGame() {

@@ -121,6 +121,7 @@ export default class GameScene extends Phaser.Scene {
     EventBus.on(GameEvents.REVIVE_GAME, this.handleRevive);
     EventBus.on(GameEvents.USE_PROP, this.handleUseProp);
     EventBus.on(GameEvents.RETRY_SESSION, this.handleRetrySession);
+    EventBus.on(GameEvents.COMPLETE_RESTART, this.handleCompleteRestart);
     this.events.on(Phaser.Scenes.Events.SHUTDOWN, this.handleShutdown, this);
 
     // 应用持久化的音效开关（与 main.ts toggleSound 的 localStorage 键一致）
@@ -504,8 +505,13 @@ export default class GameScene extends Phaser.Scene {
         if (this.engine.getAliveCards().length === 0) {
           this.pauseGame();
           this.ensureAudioAndPlay("audio/game/success.mp3");
-          // 胜利：不再弹窗，用转场动画遮挡并自动进入下一关
-          this.startWinTransition(score, levelId, sessionId);
+          // 最后一关通关：弹「全ステージクリア」结算（成绩+排名），不再自动回第 1 关
+          if (this.currentLevel + 1 >= this.levelCount) {
+            EventBus.emit(GameEvents.GAME_COMPLETE, score, levelId, sessionId);
+          } else {
+            // 非末关：照常静默上报并自动进入下一关
+            this.startWinTransition(score, levelId, sessionId);
+          }
           return;
         }
 
@@ -576,6 +582,17 @@ export default class GameScene extends Phaser.Scene {
    * 不调用 scene.restart()（否则转场层随场景销毁）。
    */
   private swapToNextLevel(): void {
+    const next = (this.currentLevel + 1) % this.levelCount; // 非末关走到这；末关走结算面板
+    this.teardownAndStartLevel(next);
+  }
+
+  /** 销毁当前棋盘 → 从指定关（0 起）重建（末关结算面板「もう一度挑戦」用）。 */
+  private readonly handleCompleteRestart = (): void => {
+    this.teardownAndStartLevel(0);
+  };
+
+  /** 公共换关路径：清场 + 重置引擎/道具 + 指定关重建。 */
+  private teardownAndStartLevel(levelIndex: number): void {
     if (this.peekTimer) {
       this.peekTimer.remove(false);
       this.peekTimer = null;
@@ -591,7 +608,7 @@ export default class GameScene extends Phaser.Scene {
     this.revived = false;
     this.engine.reset();
     this.props.reset();
-    this.currentLevel = (this.currentLevel + 1) % this.levelCount; // 最后一关通关后回到第一关
+    this.currentLevel = levelIndex % this.levelCount;
     EventBus.emit(GameEvents.PROPS_CHANGED, this.props.getCounts());
 
     this.buildLevelAsync();
@@ -838,6 +855,7 @@ export default class GameScene extends Phaser.Scene {
     EventBus.off(GameEvents.REVIVE_GAME, this.handleRevive);
     EventBus.off(GameEvents.USE_PROP, this.handleUseProp);
     EventBus.off(GameEvents.RETRY_SESSION, this.handleRetrySession);
+    EventBus.off(GameEvents.COMPLETE_RESTART, this.handleCompleteRestart);
   }
 
   /**

@@ -13,6 +13,14 @@ export const GameEvents = {
   GAME_OVER: 'GAME_OVER',
   /** Every card on the board has been removed -> player won. */
   GAME_WIN: 'GAME_WIN',
+  /**
+   * 最后一关通关：不再自动换关。payload:
+   * (score: number, levelId: number, sessionId: string)。
+   * UI 层负责上报成绩、拉取本关排名并弹出「全ステージクリア」结算面板。
+   */
+  GAME_COMPLETE: 'GAME_COMPLETE',
+  /** 结算面板点击「もう一度挑戦」：从第 1 关重新开始。 */
+  COMPLETE_RESTART: 'COMPLETE_RESTART',
   /** UI asks the game scene to restart the current level. */
   RESTART_GAME: 'RESTART_GAME',
   /** First failure: the revive (复活) dialog should be offered. */
