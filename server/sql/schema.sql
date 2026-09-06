@@ -20,6 +20,8 @@ CREATE TABLE IF NOT EXISTS hd_users (
     first_login_at DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '首次登录时间',
     last_login_at DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '最近登录时间',
     login_count INT DEFAULT 0 COMMENT '累计登录次数',
+    invite_code VARCHAR(16) NULL COMMENT '邀请码（好友互关，懒生成）',
+    UNIQUE KEY uq_invite_code (invite_code),
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     INDEX idx_openid (openid)
@@ -202,4 +204,64 @@ CREATE TABLE IF NOT EXISTS hd_levels (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='名物大乱斗-远端关卡表';
+
+-- ============================================================
+-- 13. 好友关系表（E3）
+-- ============================================================
+CREATE TABLE IF NOT EXISTS hd_relations (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    user_id BIGINT NOT NULL COMMENT '发起方用户ID',
+    friend_id BIGINT NOT NULL COMMENT '好友用户ID',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '结为好友时间',
+    UNIQUE KEY uq_rel_pair (user_id, friend_id),
+    INDEX idx_friend (friend_id),
+    FOREIGN KEY (user_id) REFERENCES hd_users(id),
+    FOREIGN KEY (friend_id) REFERENCES hd_users(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='名物大乱斗-好友关系表';
+
+-- ============================================================
+-- 14. 客户端错误表（F3）
+-- ============================================================
+CREATE TABLE IF NOT EXISTS hd_client_errors (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    user_id BIGINT DEFAULT -1 COMMENT '用户ID（-1 未登录）',
+    platform VARCHAR(16) DEFAULT '' COMMENT '平台（web / line）',
+    client_ver VARCHAR(32) DEFAULT '' COMMENT '客户端版本',
+    page_url VARCHAR(512) DEFAULT '' COMMENT '页面 URL（去 query）',
+    message VARCHAR(512) DEFAULT '' COMMENT '错误摘要',
+    stack TEXT NULL COMMENT '错误堆栈',
+    extras TEXT NULL COMMENT '附加 JSON',
+    client_ts INT DEFAULT 0 COMMENT '客户端秒级时间戳',
+    acknowledged TINYINT(1) DEFAULT 0 COMMENT '0 未处理 / 1 已确认',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '接收时间',
+    INDEX idx_created (created_at),
+    INDEX idx_ack (acknowledged),
+    INDEX idx_user (user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='名物大乱斗-客户端错误表';
+
+-- ============================================================
+-- 15. 装扮商店（C5）
+-- ============================================================
+CREATE TABLE IF NOT EXISTS hd_cosmetics (
+    item_key VARCHAR(48) PRIMARY KEY COMMENT '商品键（theme 名 / cardback 名）',
+    kind VARCHAR(16) NOT NULL COMMENT '类别：theme / cardback / ...',
+    name VARCHAR(64) DEFAULT '' COMMENT '商品名（客户端展示文案）',
+    price_gem INT DEFAULT 0 COMMENT '售价（gem；0 = 免费默认款）',
+    enabled TINYINT(1) DEFAULT 1 COMMENT '是否上架',
+    sort_order INT DEFAULT 0 COMMENT '排序',
+    extra TEXT NULL COMMENT '附加 JSON（如 iconCount）',
+    remark VARCHAR(128) DEFAULT '' COMMENT '备注',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='名物大乱斗-装扮目录表';
+
+CREATE TABLE IF NOT EXISTS hd_user_cosmetics (
+    user_id BIGINT NOT NULL COMMENT '用户ID',
+    item_key VARCHAR(48) NOT NULL COMMENT '商品键',
+    equipped TINYINT(1) DEFAULT 0 COMMENT '0 未装备 / 1 已装备',
+    acquired_at DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '获得时间',
+    PRIMARY KEY (user_id, item_key),
+    FOREIGN KEY (user_id) REFERENCES hd_users(id),
+    FOREIGN KEY (item_key) REFERENCES hd_cosmetics(item_key)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='名物大乱斗-用户装扮表';
 
